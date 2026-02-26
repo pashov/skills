@@ -20,11 +20,11 @@ Drop a skill into your AI environment and it gains a focused, reusable capabilit
 
 ## Skills
 
-| Skill                                      | Description                                                                                      | Category           |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------ |
-| [lint](skills/lint/)                       | Lints Solidity code - unused imports, NatSpec, formatting, naming, custom errors, best practices | Secure Development |
-| [audit](skills/audit/) | Fast security feedback on Solidity changes while you develop                                     | Secure Development |
-| [start-audit](skills/start-audit/)         | Full audit prep for security researchers - builds, architecture diagrams, threat model           | Security Research  |
+| Skill                              | Description                                                                                      | Category           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------ |
+| [audit](skills/audit/)             | Fast security feedback on Solidity changes while you develop                                     | Secure Development |
+| [lint](skills/lint/)               | Lints Solidity code - unused imports, NatSpec, formatting, naming, custom errors, best practices | Secure Development |
+| [start-audit](skills/start-audit/) | Full audit prep for security researchers - builds, architecture diagrams, threat model           | Security Research  |
 
 ---
 
@@ -46,8 +46,8 @@ curl -fsSL https://raw.githubusercontent.com/pashov/skills/main/skills/audit/SKI
 
 **Drop it into your agent:**
 
-| Agent                    | Where to put it                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
+| Agent                    | Where to put it                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------- |
 | Claude Code (global)     | `~/.claude/skills/audit/`                                                          |
 | Claude Code (project)    | `.claude/skills/audit/`                                                            |
 | GitHub Copilot (project) | `.github/skills/audit/`                                                            |
@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/pashov/skills/main/skills/audit/SKI
 | Cursor                   | `.cursor/rules/audit.md`                                                           |
 | Windsurf                 | `.windsurf/rules/audit.md`                                                         |
 | Codex                    | `$skill-installer install https://github.com/pashov/skills/tree/main/skills/audit` |
-| Any agent                | Paste `SKILL.md` contents into your system prompt or context window                          |
+| Any agent                | Paste `SKILL.md` contents into your system prompt or context window                |
 
 For Cursor and Windsurf, copy the contents of `SKILL.md` directly into the rules file.
 
