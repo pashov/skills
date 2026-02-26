@@ -28,21 +28,20 @@ It defines the disclaimer, severity classification, output format, and ordering 
 - **Default** (no arguments): run `git diff HEAD --name-only`, filter for `.sol` files. Stop and say so if there are no changed Solidity files.
 - **ALL**: scan all `.sol` files in the repo (exclude `lib/`, `out/`, `node_modules/`, `.git/`).
 - **`$filename`**: scan that specific file only.
-- **`--max-run-time=N`** (optional, in seconds, default `120`): set the time budget. Adjusts scope, depth, and severity coverage based on the tier below. Use a lower value for a faster gut-check; use a higher value for a deeper scan.
+- **`--max-run-time=N`** (optional, in seconds, default `120`): set the time budget. Use a lower value for a quicker gut-check; use a higher value for a deeper scan. Whatever the budget, always prioritise CRITICAL and HIGH vectors first — if time runs short, those are covered before anything lower.
 - **`--confidence=N`** (optional, default `80`): minimum confidence score (0–100) a finding must reach to be reported. Lower values cast a wider net; higher values report only near-certain issues. Example: `--confidence=70` for a broad sweep, `--confidence=95` for a tight, high-signal report.
 
 ## Time Budget
 
-The default run time is **120 seconds**. Apply the constraints for the matching tier. Tiers are cumulative — a higher budget includes everything from lower tiers.
+The default run time is **120 seconds**. Spend the budget doing your best work — do not artificially restrict which severities you report. Always work in this priority order so the most dangerous findings are never skipped:
 
-| Budget | Severities | Reference files | Assets | File cap (ALL mode) |
-|---|---|---|---|---|
-| ≤ 30s | CRITICAL only | Skip — use built-in knowledge | Skip | 2 files |
-| ≤ 60s | CRITICAL, HIGH | Skip — use built-in knowledge | Skip | 5 files |
-| ≤ 120s **(default)** | CRITICAL, HIGH, MEDIUM | Skip — use built-in knowledge | Load | All files |
-| ≤ 300s | All severities | Read `attack-vectors.md` | Load | All files |
+1. Scan for CRITICAL vectors first across all in-scope files.
+2. Scan for HIGH vectors.
+3. Scan for MEDIUM, then LOW, with remaining time.
 
-**Built-in high-yield vectors** (used when `attack-vectors.md` is skipped): reentrancy (single, cross-function, read-only), missing/incorrect access control, unprotected initializer, oracle spot-price manipulation, flash loan price manipulation, unchecked arithmetic in value flows, msg.value reuse in loop/multicall, delegatecall to user-controlled address, signature replay, abi.encodePacked hash collision, price slippage (no min output).
+If the budget is tight, rely on built-in knowledge of Solidity attack vectors instead of reading `references/attack-vectors.md`. At 300 seconds or more, read the full reference first — it sharpens detection across all 49 vectors.
+
+**Built-in high-yield vectors** (used when time is short): reentrancy (single, cross-function, read-only), missing/incorrect access control, unprotected initializer, oracle spot-price manipulation, flash loan price manipulation, unchecked arithmetic in value flows, msg.value reuse in loop/multicall, delegatecall to user-controlled address, signature replay, abi.encodePacked hash collision, price slippage (no min output).
 
 ---
 

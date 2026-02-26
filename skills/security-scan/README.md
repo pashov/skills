@@ -16,11 +16,9 @@ Built for **developers** who want to catch issues early - not a replacement for 
 # Review the entire repo
 /security-scan ALL
 
-# Default run is 2 minutes (CRITICAL + HIGH + MEDIUM, all files)
-# Use --max-run-time to make it shorter or longer
-/security-scan --max-run-time=30   # quickest: CRITICAL only, 2 files max
-/security-scan --max-run-time=60   # CRITICAL + HIGH, 5 files max
-/security-scan --max-run-time=300  # deepest: all severities, full reference checklist
+# Default run is 2 minutes - use --max-run-time to make it shorter or longer
+/security-scan --max-run-time=30   # quickest gut-check
+/security-scan --max-run-time=300  # deep scan, reads full attack vector reference
 
 # Confidence threshold - only report findings at or above N/100 (default: 80)
 /security-scan --confidence=65    # broader sweep, includes more uncertain findings
@@ -33,7 +31,7 @@ Built for **developers** who want to catch issues early - not a replacement for 
 - **File mode**: reviews a single contract you specify
 - **ALL mode**: scans the full repo at its current state
 
-It reads your code, applies a standard checklist of Solidity vulnerabilities, and gives you a structured report with severity, confidence score, and a concrete mitigation for each finding. The default run targets 2 minutes — use `--max-run-time=N` (seconds) to make it shorter or longer. Findings below the confidence threshold are suppressed — the report stays signal, not noise.
+It reads your code, scans for Solidity vulnerabilities in priority order (CRITICAL and HIGH first), and gives you a structured report with severity, confidence score, and a concrete mitigation for each finding. The default run targets 2 minutes — use `--max-run-time=N` (seconds) to make it shorter or longer. Findings below the confidence threshold are suppressed — the report stays signal, not noise.
 
 ## False positives
 
