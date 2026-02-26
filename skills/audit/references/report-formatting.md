@@ -40,7 +40,7 @@ Do not report INFO findings.
 
 ---
 
-<severity emoji> ### 1. [HIGH, N] <Title>
+<severity emoji> **1. [HIGH, N] <Title>**
 
 **Location** `ContractName.functionName` · line N
 **Description** <vector name — what is wrong and why it matters — what an attacker can do>
@@ -48,7 +48,7 @@ Do not report INFO findings.
 
 ---
 
-<severity emoji> ### 2. [MEDIUM, N] <Title>
+<severity emoji> **2. [MEDIUM, N] <Title>**
 ...
 
 ---
