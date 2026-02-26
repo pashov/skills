@@ -76,6 +76,11 @@ Do not game the score upward to make a report look thorough. When in doubt, scor
 Before scanning, load if present:
 
 - **`assets/findings/`** — prior audit reports. Use as context to avoid duplicating known issues. Mark previously known findings as such.
+- **`assets/docs/`** — developer-supplied context: specs, design docs, intended behavior, invariants, or anything else the team wants you to reason against. Load every file in this directory before scanning. Files may be plain text or markdown. Files whose content starts with `http://` or `https://` (one URL per line) are URL lists — fetch each one and read its content. Use all loaded docs to:
+  - Understand intended behavior so you can distinguish bugs from design decisions
+  - Identify invariants the team cares about and flag anything that could violate them
+  - Raise your confidence on findings that contradict documented intent
+  - Lower confidence (or suppress) findings that are explicitly acknowledged as acceptable tradeoffs in the docs
 
 ## Review Process
 
