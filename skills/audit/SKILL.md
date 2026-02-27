@@ -18,7 +18,7 @@ Always read the full attack vector reference before scanning:
 references/attack-vectors.md
 ```
 
-It contains 62 attack vectors with precise detection patterns and false-positive signals. Use it as your scanning checklist for every file.
+It contains 61 attack vectors with precise detection patterns and false-positive signals. Use it as your scanning checklist for every file.
 
 Always read the report formatting specification before producing output:
 
@@ -30,10 +30,6 @@ It defines the disclaimer, severity classification, output format, and ordering 
 </context>
 
 <instructions>
-
-## Claude-Specific Behavior
-
-If you are a Claude model (Anthropic): use the latest available Claude Sonnet model and enable extended thinking with `thinking effort = 100` (maximum).
 
 ## Mode Selection
 
@@ -74,9 +70,30 @@ Every finding is assigned a confidence score from 0 to 100 before being reported
 
 Do not game the score upward to make a report look thorough. When in doubt, score lower and let the threshold filter decide.
 
+## File Size Check
+
+Before planning, check the size of every file in scope:
+
+```
+wc -l <files>
+```
+
+Record the line count for each file. Use this to prioritise larger files, estimate scan time, and flag anything unusually large that may need extra attention.
+
+## Planning Phase
+
+After checking file sizes, print a plan to the terminal. Include:
+
+1. **Scope** — list every file with its line count from the size check.
+2. **Attack surface summary** — one sentence per file describing its role and why it matters (e.g. "Vault.sol (312 lines) — handles ETH deposits and withdrawals, high value at risk").
+3. **Time estimate** — estimate total scan time in seconds based on file count and line counts. Format: `Estimated scan time: ~Xs`.
+4. **Priority order** — list which files you will scan first and why (e.g. files with external calls, value transfers, or access control changes go first; larger files first when priority is equal).
+
+Print the plan as a clean, readable block. Do not load context or start scanning until the plan is printed.
+
 ## Context Loading
 
-Before scanning, load if present:
+After planning, load if present:
 
 - **`assets/findings/`** — prior audit reports. Use as context to avoid duplicating known issues. Mark previously known findings as such.
 - **`assets/docs/`** — developer-supplied context: specs, design docs, intended behavior, invariants, or anything else the team wants you to reason against. Load every file in this directory before scanning. Files may be plain text or markdown. Files whose content starts with `http://` or `https://` (one URL per line) are URL lists — fetch each one and read its content. Use all loaded docs to:
@@ -84,17 +101,6 @@ Before scanning, load if present:
   - Identify invariants the team cares about and flag anything that could violate them
   - Raise your confidence on findings that contradict documented intent
   - Lower confidence (or suppress) findings that are explicitly acknowledged as acceptable tradeoffs in the docs
-
-## Planning Phase
-
-Before scanning, print a plan to the terminal. Include:
-
-1. **Scope** — list every file that will be reviewed (or state "N changed Solidity files" for default mode).
-2. **Attack surface summary** — one sentence per file describing its role and why it matters (e.g. "Vault.sol — handles ETH deposits and withdrawals, high value at risk").
-3. **Time estimate** — estimate total scan time in seconds based on file count and complexity. Format: `Estimated scan time: ~Xs`.
-4. **Priority order** — list which files you will scan first and why (e.g. files with external calls, value transfers, or access control changes go first).
-
-Print the plan as a clean, readable block before any scanning begins. Do not start scanning until the plan is printed.
 
 ## Review Process
 
