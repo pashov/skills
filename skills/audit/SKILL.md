@@ -18,7 +18,7 @@ Always read the full attack vector reference before scanning:
 references/attack-vectors.md
 ```
 
-It contains 61 attack vectors with precise detection patterns and false-positive signals. Use it as your scanning checklist for every file.
+It contains 65 attack vectors with precise detection patterns and false-positive signals. Use it as your scanning checklist for every file.
 
 Always read the report formatting specification before producing output:
 
