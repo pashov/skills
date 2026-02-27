@@ -37,15 +37,11 @@ git clone https://github.com/pashov/skills
 
 **2. Copy a skill to your agent**
 
-| Agent                    | Command                                                    |
-| ------------------------ | ---------------------------------------------------------- |
-| Claude Code (global)     | `cp -r skills/audit ~/.claude/skills/audit`                |
-| Claude Code (project)    | `cp -r skills/audit {project-dir}/.claude/skills/audit`    |
-| GitHub Copilot (project) | `cp -r skills/audit {project-dir}/.github/skills/audit`    |
-| GitHub Copilot (global)  | `cp -r skills/audit ~/.copilot/skills/audit`               |
-| Cursor (global)          | `cp skills/audit/SKILL.md ~/.cursor/commands/audit.md`     |
-| Cursor (project)         | `cp skills/audit/SKILL.md {project-dir}/.cursor/commands/audit.md` |
-| Any agent                | Paste `skills/audit/SKILL.md` into your system prompt      |
+| Agent                   | Command                                                |
+| ----------------------- | ------------------------------------------------------ |
+| Claude Code (global)    | `cp -r skills/audit ~/.claude/skills/audit`            |
+| GitHub Copilot (global) | `cp -r skills/audit ~/.copilot/skills/audit`           |
+| Cursor (global)         | `cp skills/audit/SKILL.md ~/.cursor/commands/audit.md` |
 
 **3. Invoke**
 

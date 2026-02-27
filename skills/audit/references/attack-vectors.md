@@ -281,8 +281,8 @@
 
 **56. Missing Input Validation on Critical Setters**
 
-- **Detect:** Admin functions set critical addresses or numeric parameters with no validation: `setFeeReceiver(address x)` with no `require(x != address(0))`; `setFee(uint256 fee)` with no `require(fee <= MAX_FEE)`; `setOracle(address o)` with no interface check. A misconfigured call — wrong argument, zero address, value exceeding 100% — silently bricks fee collection, enables 100% fee extraction, or points the oracle to a dead address. Also: `setImplementation(address impl)` with no `require(impl.code.length > 0)` allows upgrading to an EOA, destroying the proxy.
-- **FP:** Every setter has explicit `require` bounds on all parameters. Numeric parameters validated against documented protocol constants. Zero-address check present on every address setter.
+- **Detect:** Admin functions set numeric parameters with no validation: `setFee(uint256 fee)` with no `require(fee <= MAX_FEE)`; `setOracle(address o)` with no interface check. A misconfigured call — wrong argument, value exceeding 100% — silently bricks fee collection, enables 100% fee extraction, or points the oracle to a dead address. 
+- **FP:** Every setter has explicit `require` bounds on all parameters. Numeric parameters validated against documented protocol constants. 
 
 **57. Staking Reward Front-Run by New Depositor**
 
