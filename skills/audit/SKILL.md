@@ -115,6 +115,18 @@ Prioritize findings that are:
 - In functions handling value (ETH, tokens, governance power)
 - In code that was changed (in default mode)
 
+## Deduplication
+
+Before producing output, run a fast deduplication pass over all findings. If you are Claude, delegate this step to `claude-haiku` for speed.
+
+For each pair of findings, assign a similarity score (0–100) based on root cause and affected code:
+
+- **≥ 85** — same root cause or near-identical pattern: merge into one finding. Use the more precise location, write a combined description, and keep the **lower** severity if it is fair.
+- **60–84** — closely related but distinct symptoms: keep both, but note the relationship in the Description of the higher-severity one.
+- **< 60** — independent: no action.
+
+After merging, remove any finding that is now fully subsumed by another. The goal is a clean, non-redundant report — not a longer one.
+
 ## Banner
 
 Before doing anything else, print this exactly:
