@@ -24,9 +24,6 @@ Built for **developers** who want to catch issues early - not a replacement for 
 /audit --confidence=65    # broader sweep, includes more uncertain findings
 /audit --confidence=95    # tight report, near-certain issues only
 
-# Reasoning depth - controls how hard the model thinks beyond the checklist (default: 75)
-/audit --reasoning=50     # faster, lighter analysis
-/audit --reasoning=100    # maximum scrutiny, re-examines uncertain findings
 ```
 
 ## What it does
@@ -35,7 +32,7 @@ Built for **developers** who want to catch issues early - not a replacement for 
 - **File mode**: reviews a single contract you specify
 - **ALL mode**: scans the full repo at its current state
 
-Every run reads the full 49-vector attack checklist before scanning. Beyond the checklist, the model applies its own security reasoning to catch project-specific logic bugs and unusual vulnerability combinations that don't map to any named vector. `--reasoning` controls how deep that free reasoning goes — at `100` it reconsiders edge cases and re-examines uncertain findings before reporting; at `50` it moves faster with lighter analysis. Findings below the confidence threshold are suppressed — the report stays signal, not noise.
+Every run reads the full 62-vector attack checklist before scanning. Beyond the checklist, the model applies its own security analysis to catch project-specific logic bugs and unusual vulnerability combinations that don't map to any named vector. Findings below the confidence threshold are suppressed — the report stays signal, not noise.
 
 ## Giving it project context
 

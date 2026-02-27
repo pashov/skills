@@ -1,5 +1,5 @@
 ---
-name: audit-prep
+name: audit-helper
 description: This skill helps security researchers and auditors start an in-depth security review, understand the codebase and get up to speed fast. Use it when the user says "start an audit", "prep this repo for auditing", "audit setup", or shares a Solidity/Foundry/Hardhat codebase and wants to understand it before reviewing.
 ---
 
@@ -32,7 +32,7 @@ npm install  # or yarn install / pnpm install, based on lockfile
 npx hardhat compile
 ```
 
-Surface any compilation errors verbatim in the output. If the build fails, document the errors in `audit-prep/build-errors.md` and continue with static analysis - a failed build doesn't stop the rest of the workflow.
+Surface any compilation errors verbatim in the output. If the build fails, document the errors in `audit-helper/build-errors.md` and continue with static analysis - a failed build doesn't stop the rest of the workflow.
 
 ### 3. Discover Contracts
 
@@ -44,13 +44,13 @@ Read all `.sol` files under `src/`, `contracts/`, or wherever the toolchain conf
 
 ### 4. Generate Deliverables
 
-Produce all five files in an `audit-prep/` directory at the repo root. Run through each one in order.
+Produce all five files in an `audit-helper/` directory at the repo root. Run through each one in order.
 
 ---
 
 ## Deliverables
 
-### `audit-prep/protocol-summary.md`
+### `audit-helper/protocol-summary.md`
 
 A plain-English description of the protocol. Cover:
 - What the protocol does and who uses it
@@ -60,7 +60,7 @@ A plain-English description of the protocol. Cover:
 - Upgrade patterns if any (proxy type, upgrade authority)
 - Any notable design decisions or tradeoffs visible in the code
 
-### `audit-prep/architecture.md`
+### `audit-helper/architecture.md`
 
 A Mermaid diagram showing the contract structure, then a written explanation.
 
@@ -85,7 +85,7 @@ classDiagram
 
 After the diagram, describe each contract's responsibility in 1-3 sentences.
 
-### `audit-prep/flow-of-funds.md`
+### `audit-helper/flow-of-funds.md`
 
 A Mermaid flowchart tracing how assets move, then a written explanation.
 
@@ -106,7 +106,7 @@ flowchart LR
 
 After the diagram, describe each flow in plain English, including any conditions or branching.
 
-### `audit-prep/integrations.md`
+### `audit-helper/integrations.md`
 
 Documents every external dependency. For each integration include:
 - Protocol name and version (if determinable)
@@ -117,7 +117,7 @@ Documents every external dependency. For each integration include:
 
 Categories to check: price oracles, DEX routers, lending protocols, bridges, token standards (ERC20/721/1155 quirks), governance systems, and any raw `call`/`delegatecall` targets.
 
-### `audit-prep/threat-model.md`
+### `audit-helper/threat-model.md`
 
 A structured threat model. Use this format:
 
@@ -148,14 +148,14 @@ After generating all five files, print a summary:
 ```
 ## Audit Prep Complete
 
-Build: ✅ success  (or ❌ failed - see audit-prep/build-errors.md)
+Build: ✅ success  (or ❌ failed - see audit-helper/build-errors.md)
 
 Generated:
-- audit-prep/protocol-summary.md
-- audit-prep/architecture.md
-- audit-prep/flow-of-funds.md
-- audit-prep/integrations.md
-- audit-prep/threat-model.md
+- audit-helper/protocol-summary.md
+- audit-helper/architecture.md
+- audit-helper/flow-of-funds.md
+- audit-helper/integrations.md
+- audit-helper/threat-model.md
 
 [2-3 sentence snapshot of what the protocol does and the most notable things an auditor should focus on first]
 ```

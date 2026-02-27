@@ -20,7 +20,7 @@
       "license": "MIT"
     },
     {
-      "name": "audit-prep",
+      "name": "audit-helper",
       "source": {
         "source": "github",
         "repo": "pashov/skills",

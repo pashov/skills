@@ -22,7 +22,7 @@ Drop a skill into your AI environment and it gains a focused, reusable capabilit
 | Skill                            | Description                                                                                      | Category           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------ |
 | [audit](skills/audit/)           | Fast security feedback on Solidity changes while you develop                                     | Secure Development |
-| [audit-prep](skills/audit-prep/) | Full audit prep for security researchers - builds, architecture diagrams, threat model           | Security Research  |
+| [audit-helper](skills/audit-helper/) | Full audit prep for security researchers - builds, architecture diagrams, threat model           | Security Research  |
 | [lint](skills/lint/)             | Lints Solidity code - unused imports, NatSpec, formatting, naming, custom errors, best practices | Secure Development |
 
 ---

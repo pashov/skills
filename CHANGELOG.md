@@ -20,12 +20,12 @@ Pre-release versions are tagged as `v1.0.0-beta.1`, `v1.0.0-rc.1`, etc.
 ## [Unreleased]
 
 ### Added
-- Initial repository structure
-- Skill template (`skills/_template/`)
-- Platform directories: `claude/`, `openai/`, `gemini/`, `generic/`
-- `README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`
-- GitHub Actions CI workflow
-- Issue and PR templates
+- `audit` skill — fast security feedback on Solidity changes during development
+- `audit-helper` skill — full audit prep for security researchers (build, architecture, threat model)
+- `lint` skill — Solidity linter covering NatSpec, naming, visibility, custom errors, and more
+- Plugin manifest (`.claude-plugin/plugin.json`) and `marketplace.json` for Claude plugin distribution
+- Repository scaffolding: `README.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`
+- GitHub issue and PR templates
 
 ---
 
@@ -34,16 +34,16 @@ Pre-release versions are tagged as `v1.0.0-beta.1`, `v1.0.0-rc.1`, etc.
 ## [1.1.0] - YYYY-MM-DD
 
 ### Added
-- New `skills/claude/my-skill` skill
+- New `skills/my-skill` skill
 
 ### Changed
-- Improved prompt in `skills/generic/summarizer`
+- Improved prompt in `skills/audit`
 
 ### Fixed
-- Corrected model compatibility list in `skills/openai/code-review/skill.json`
+- Corrected model compatibility list in `skills/lint/SKILL.md`
 
 ### Removed
-- Deprecated `skills/generic/old-skill`
+- Deprecated `skills/old-skill`
 
 -->
 
