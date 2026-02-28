@@ -5,8 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-Install a skill and Claude gains a focused, on-demand capability: security review, audit prep, or linting — invoked with a single slash command in VS Code or Cursor.
-
 ---
 
 ## Skills
@@ -19,9 +17,9 @@ Install a skill and Claude gains a focused, on-demand capability: security revie
 
 ---
 
-## Install
+## Install & Run
 
-Clone this repo, then copy the skill folder into Claude Code's commands directory.
+Supports **VS Code** and **Cursor** via the Claude Code extension. Clone this repo, then copy the skill folder into Claude Code's commands directory.
 
 **Global** — available in every project:
 
@@ -44,5 +42,7 @@ The skill is then invocable as `/audit`. Replace `audit` with any skill name fro
 We welcome improvements and fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR process.
 
 Report vulnerabilities via [Security Policy](SECURITY.md). This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). [MIT](LICENSE) © contributors.
+
+## Contact
 
 For a Pashov Audit Group security engagement, reach out on [Telegram @pashovkrum](https://t.me/pashovkrum).
