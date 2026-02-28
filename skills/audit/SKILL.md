@@ -8,7 +8,7 @@ description: Fast, focused security feedback on Solidity code while you develop 
 <context>
 ## Context
 
-You are an adversarial security researcher. Your job is to break the code — find every flaw, think like an attacker, and go deep. Assume nothing is safe until proven otherwise. Always be thorough: consider edge cases, unusual call sequences, unexpected state combinations, and interactions between functions that may seem safe in isolation but dangerous together.
+You are an adversarial security researcher orchestrating a parallel audit. Your job is to coordinate 5 simultaneous agent workers that each scan assigned files for vulnerabilities, then merge and deduplicate their findings into a single authoritative report.
 
 Fast, focused security feedback while you're developing. Catch real issues early - before they reach an audit or mainnet.
 
@@ -107,39 +107,83 @@ After planning, load if present:
   - Raise your confidence on findings that contradict documented intent
   - Lower confidence (or suppress) findings that are explicitly acknowledged as acceptable tradeoffs in the docs
 
-## Review Process
+## Parallel Agent Orchestration
 
-For each file in scope:
+After loading context and determining the final list of in-scope files, launch **5 parallel worker agents** that perform the scanning simultaneously.
+
+### Step 1 — Divide files into 5 groups
+
+Split the in-scope file list into up to 5 groups as evenly as possible. If there are fewer than 5 files, some agents receive a single file and the rest are skipped. If there is only 1 file, launch 5 agents that each cover a different severity tier instead (Agent 1: CRITICAL, Agent 2: HIGH, Agent 3: MEDIUM, Agent 4: LOW, Agent 5: cross-file/inheritance checks).
+
+### Step 2 — Launch all 5 agents in a single parallel call
+
+Use the Agent tool to launch all active worker agents **simultaneously in one message** (not sequentially). Each agent is a `general-purpose` agent. Pass each agent a self-contained prompt using the template below — it must include everything the agent needs to work without follow-up.
+
+### Worker Agent Prompt Template
+
+Construct a prompt like the following for each worker, substituting the bracketed values:
+
+```
+You are an adversarial Solidity security researcher. Scan the assigned smart contract files for vulnerabilities and return a structured findings list.
+
+## Your assigned files
+[List of absolute file paths for this agent]
+
+## Setup — read these files before scanning
+1. [absolute path to references/attack-vectors.md]
+[If ERC721 detected]: 2. [absolute path to references/erc721/attack-vectors.md]
+[If ERC1155 detected]: 3. [absolute path to references/erc1155/attack-vectors.md]
+[If ERC4626 detected]: 4. [absolute path to references/erc4626/attack-vectors.md]
+[If ERC4337 detected]: 5. [absolute path to references/erc4337/attack-vectors.md]
+[If assets/findings/ has files]: Also read all files in [absolute path to assets/findings/] — use them to avoid duplicating known issues.
+[If assets/docs/ has files]: Also read all files in [absolute path to assets/docs/] — use them to understand intended behavior.
+
+## Severity tiers to prioritize (in order)
+[If this is a file-split agent]: CRITICAL → HIGH → MEDIUM → LOW
+[If this is a severity-split agent]: [e.g., CRITICAL only — do not report others]
+
+## For each assigned file
 
 1. Read the full file.
-2. **Resolve inheritance.** If the contract inherits other contracts (`is A, B, C`), read those parent contracts too — including transitive parents — but only if they are part of the project's own source code. Skip parents that resolve to external libraries (`lib/`, `node_modules/`, or any path outside the project source). Treat the contract as the union of all in-scope inherited and overridden functions. A vulnerability can emerge from the combination: an inherited function that is safe on its own can become exploitable when combined with state variables, overrides, or access control defined in the child, and vice versa.
-3. Scan against the attack vectors. For each vector, check whether the detection pattern is present, then check the false-positive signals before deciding to report it.
-4. Only carry forward findings where the detection pattern matches AND the false-positive conditions do not fully apply.
-5. Assign a confidence score (0–100) per the Confidence Scoring section above.
-6. Suppress findings whose confidence score is below the active threshold (default 80; overridden by `--confidence=N`).
-7. Use judgment on severity — a theoretical issue in code that's demonstrably bounded is not a finding.
+2. Resolve inheritance: read parent contracts that are in the project source (skip lib/, node_modules/, or paths outside src/). Treat the contract as the union of all in-scope inherited and overridden functions.
+3. Scan against every attack vector in the loaded reference files. Check the detection pattern, then check false-positive signals before deciding to report.
+4. Only carry forward a finding if the detection pattern matches AND false-positive conditions do not fully apply.
+5. Assign a confidence score (0–100) per the scoring rules in attack-vectors.md. Suppress findings below [active threshold, default 80].
+6. Apply severity downgrade rules:
+   - Privileged caller required → drop one level
+   - Impact is self-contained → drop one level
+   - No direct monetary loss → cap at MEDIUM
+   - Attack path is incomplete → drop one level
+   - Uncertain between two levels → choose lower
 
-## Severity Assignment
+## Return format — use this exact structure for each finding
 
-After assigning confidence, assign severity per `references/report-formatting.md`. Then apply these downgrade rules before finalizing:
+FINDING
+Severity: CRITICAL | HIGH | MEDIUM | LOW
+Confidence: N
+Location: ContractName.functionName · line N
+Title: short descriptive title
+Impact: concrete sentence — who is affected, what they lose or gain, worst-case outcome
+Description: the vulnerable code pattern and why it is exploitable (1–2 sentences)
+Mitigation: concrete recommendation with inline code references, no fenced code blocks
+END_FINDING
 
-- **Privileged caller required** (owner, admin, multisig, governance) → drop one level.
-- **Impact is self-contained** (affects only the attacker's own funds, a specific unreachable state, or a narrow subset of users with no spillover) → drop one level.
-- **No direct monetary loss** (disruption, incorrect state, griefing, gas waste, but no fund drain) → cap at MEDIUM.
-- **Attack path is incomplete** (you cannot write caller → call sequence → concrete outcome) → drop one level.
-- **When uncertain between two levels** → always choose the lower.
+SUPPRESSED
+Confidence: N
+Location: ContractName.functionName
+Description: one sentence — what the issue is and why it was suppressed
+END_SUPPRESSED
 
-CRITICAL and HIGH are rare. Most findings in production Solidity land at MEDIUM or LOW. If your draft report has more than one CRITICAL or HIGH, re-examine each before finalizing — the bar is a complete, end-to-end exploit with meaningful value at risk and no significant preconditions.
+Return ONLY findings and suppressed entries using the format above. Do not write a full report — the orchestrator will merge and format everything.
+```
 
-Prioritize findings that are:
+### Step 3 — Collect and merge
 
-- Directly exploitable with a concrete attack path
-- In functions handling value (ETH, tokens, governance power)
-- In code that was changed (in default mode)
+Wait for all agents to complete. Collect every `FINDING` and `SUPPRESSED` block from all agent responses into one combined list.
 
-## Deduplication
+### Step 4 — Deduplicate
 
-Before producing output, run a fast deduplication pass over all findings. If you are Claude, delegate this step to `claude-haiku` for speed.
+Run a deduplication pass over all collected findings. If you are Claude, delegate this step to `claude-haiku` for speed.
 
 For each pair of findings, assign a similarity score (0–100) based on root cause and affected code:
 
