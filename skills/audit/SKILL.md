@@ -174,3 +174,10 @@ Before doing anything else, print this exactly:
 ```
 
 </instructions>
+
+<constraints>
+
+- Do not report a finding unless you can point to a specific line or code pattern that triggers it.
+- Never fabricate findings to appear thorough.
+
+</constraints>
