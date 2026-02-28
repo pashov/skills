@@ -8,14 +8,7 @@ description: Fast, focused security feedback on Solidity code while you develop 
 <context>
 You are an adversarial security researcher. For small scopes you scan directly; for larger scopes you delegate to a worker agent. You then deduplicate and assemble findings into a single report.
 
-ERC-specific attack vector files exist alongside the core reference. Load the matching file when a standard is detected in the in-scope files:
-
-| Standard detected                               | File to load                                        |
-| ----------------------------------------------- | --------------------------------------------------- |
-| ERC721 / IERC721                                | `references/erc721/attack-vectors.md` (11 vectors)  |
-| ERC1155 / IERC1155                              | `references/erc1155/attack-vectors.md` (10 vectors) |
-| ERC4626 / IERC4626                              | `references/erc4626/attack-vectors.md` (8 vectors)  |
-| ERC4337 / IAccount / IPaymaster / UserOperation | `references/erc4337/attack-vectors.md` (7 vectors)  |
+Attack vector references live under `references/` — the core `attack-vectors.md` plus subdirectory-specific files (erc721, erc1155, erc4626, erc4337). Always read all of them.
 </context>
 
 <instructions>
@@ -23,39 +16,26 @@ ERC-specific attack vector files exist alongside the core reference. Load the ma
 ## Mode Selection
 
 - **Default** (no arguments): run `git diff HEAD --name-only`, filter for `.sol` files. If none found, ask the user which file to scan and mention that `/audit ALL` scans the entire repo.
-- **ALL**: scan all `.sol` files, excluding directories `lib/`, `out/`, `node_modules/`, `.git/`, `test/`, `tests/`, `spec/`, `__tests__/`, `mocks/` and files matching `*.t.sol`, `Test*.sol`, `*Test.sol`, `*Spec.sol`, or `*Mock*.sol`.
+- **ALL**: scan all `.sol` files, excluding directories `lib/`, `mocks/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
 - **`$filename`**: scan that specific file only.
 
 **Flag:** `--confidence=N` (default `75`): minimum confidence score (0–100) a finding must reach to be reported. Lower = wider net, more false positives. Higher = tighter report, near-certain issues only.
 
-## Severity Classification
-
-| Severity     | Emoji | Criteria                                                                                                                                                                            |
-| ------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **CRITICAL** | ⛔    | Direct theft or permanent loss/freeze of user or protocol funds; full protocol takeover; governance capture that gives an attacker unilateral control.                              |
-| **HIGH**     | 🔴    | Significant financial loss through realistic attack paths; temporary freeze of user funds; theft of unclaimed yield or rewards; loss of core protocol functionality.                |
-| **MEDIUM**   | 🟡    | Limited or conditional financial impact requiring specific preconditions; DoS or griefing that causes disruption without direct profit; protocol misbehavior under edge conditions. |
-| **LOW**      | 🔵    | No direct financial risk; best-practice violations, code-quality issues, or incorrect behavior in edge cases that degrade correctness or gas efficiency but leave user assets safe. |
-
-When uncertain between two severity levels, always assign the lower one. CRITICAL and HIGH require a complete, end-to-end exploit path with meaningful value at risk and no significant preconditions.
-
-**Downgrade rules:**
-
-- Privileged caller required (owner, admin, multisig, governance) → drop one level.
-- Impact is self-contained (attacker's own funds only, unreachable state, narrow subset with no spillover) → drop one level.
-- No direct monetary loss (disruption, griefing, gas waste, incorrect state) → cap at MEDIUM.
-- Attack path is incomplete (cannot write caller → call sequence → concrete outcome) → drop one level.
-- Uncertain between two levels → choose the lower.
-
-CRITICAL and HIGH are rare. If you have more than one, re-examine each before returning.
-
-**Do not report:** INFO-level findings, issues a linter or compiler would catch, or pedantic nitpicks a serious engineer would omit (gas micro-optimizations, naming preferences, missing NatSpec, redundant comments). If a finding would make a seasoned auditor roll their eyes, leave it out.
-
 ## Execution
 
-Run `mkdir -p assets/findings && date +%Y%m%d-%H%M%S` and `wc -l` on in-scope files. Derive the project name from the repo root basename and set `REPORT=assets/findings/{project-name}-pashov-ai-audit-report-{timestamp}.md`. Print the in-scope files table: `| File | Lines |` ordered by line count descending.
+Print `⏱ [HH:MM:SS]` timestamps (via `date +%H:%M:%S`) at each of these checkpoints:
 
-Grep in-scope files for ERC standard imports/interfaces (ERC721, IERC721, ERC1155, IERC1155, ERC4626, IERC4626, ERC4337, IAccount, IPaymaster, UserOperation). Read `attack-vectors.md` and any matching ERC-specific vector files, then scan all in-scope files.
+| Tag | When |
+|---|---|
+| `T0 Start` | After banner, before any work |
+| `T1 Scope` | After file discovery |
+| `T2 Refs` | After reading all reference files |
+| `T3 Source` | After reading all in-scope .sol files |
+| `T4 Scan` | After all findings identified |
+| `T4.N` | After every 3 findings drafted (see report-formatting.md) |
+| `T5 Report` | After report file written |
+
+Read `references/report-formatting.md` and all `attack-vectors.md` files under `references/`, then scan all in-scope files.
 
 For each file:
 
@@ -63,11 +43,11 @@ For each file:
 2. Work through every attack vector — check detection pattern, then false-positive signals. Only carry forward if detection matches AND false-positive conditions do not fully apply. Then apply general adversarial reasoning for issues the vectors don't cover — carry forward if you can write a concrete attack path with clear impact.
 3. Assign a confidence score (0–100). Suppress findings below the active threshold.
 4. For each finding, draft a code fix (diff format).
-5. Apply the severity downgrade rules above.
+5. Apply the severity and downgrade rules from `references/report-formatting.md`.
 
 Format each finding per the template in `references/report-formatting.md`. Emojis: ⛔ CRITICAL · 🔴 HIGH · 🟡 MEDIUM · 🔵 LOW
 
-Print a summary table to the terminal: `| # | Sev | Title |` ordered Critical → High → Medium → Low. Write the full report to REPORT following `references/report-formatting.md`. Number findings sequentially. Include a suppressed findings table at the end. Print: `Report saved → {REPORT path}`
+Print a summary table to the terminal: `| # | Sev | Title |` ordered Critical → High → Medium → Low. Write the full report following `references/report-formatting.md`. Number findings sequentially. Include a suppressed findings table at the end. Print the report path.
 
 ## Banner
 

@@ -1,5 +1,32 @@
 # Report Formatting
 
+## Report Path
+
+Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{timestamp}.md` where `{project-name}` is the repo root basename and `{timestamp}` is `YYYYMMDD-HHMMSS` at scan time.
+
+## Severity Classification
+
+| Severity     | Emoji | Criteria                                                                                                                                                                            |
+| ------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CRITICAL** | ⛔    | Direct theft or permanent loss/freeze of user or protocol funds; full protocol takeover; governance capture that gives an attacker unilateral control.                              |
+| **HIGH**     | 🔴    | Significant financial loss through realistic attack paths; temporary freeze of user funds; theft of unclaimed yield or rewards; loss of core protocol functionality.                |
+| **MEDIUM**   | 🟡    | Limited or conditional financial impact requiring specific preconditions; DoS or griefing that causes disruption without direct profit; protocol misbehavior under edge conditions. |
+| **LOW**      | 🔵    | No direct financial risk; best-practice violations, code-quality issues, or incorrect behavior in edge cases that degrade correctness or gas efficiency but leave user assets safe. |
+
+When uncertain between two severity levels, always assign the lower one. CRITICAL and HIGH require a complete, end-to-end exploit path with meaningful value at risk and no significant preconditions.
+
+**Downgrade rules:**
+
+- Privileged caller required (owner, admin, multisig, governance) → drop one level.
+- Impact is self-contained (attacker's own funds only, unreachable state, narrow subset with no spillover) → drop one level.
+- No direct monetary loss (disruption, griefing, gas waste, incorrect state) → cap at MEDIUM.
+- Attack path is incomplete (cannot write caller → call sequence → concrete outcome) → drop one level.
+- Uncertain between two levels → choose the lower.
+
+CRITICAL and HIGH are rare. If you have more than one, re-examine each before returning.
+
+**Do not report:** INFO-level findings, issues a linter or compiler would catch, or pedantic nitpicks a serious engineer would omit (gas micro-optimizations, naming preferences, missing NatSpec, redundant comments). If a finding would make a seasoned auditor roll their eyes, leave it out.
+
 ## Output Format
 
 ````
@@ -74,4 +101,5 @@
 - Scope is a two-column table immediately after the disclaimer, not a prose paragraph.
 - The "Confidence threshold" label always reads `Confidence threshold (1-100)`.
 - Suppressed findings appear at the end of the report as a `## Suppressed Findings` section rendered as a three-column table (`Confidence · Location · Description`), not as prose. One row per suppressed finding. Descriptions are one sentence: what the issue is and why it was suppressed.
+- **Timing:** Print each finding to the terminal as you draft it. After every 3 findings (and after the last one), get a timestamp via `date +%H:%M:%S` and print `⏱ [HH:MM:SS] Findings 1-3 drafted` (adjusting the range). After all findings are drafted, write the complete report to the file in a single Write call.
 ```
