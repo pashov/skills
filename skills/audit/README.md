@@ -28,7 +28,7 @@ For **developers writing Solidity** who want a security gut-check as part of the
 - **File mode**: reviews a single contract you specify
 - **ALL mode**: scans the full repo (excludes `lib/`, `mocks/`, `*.t.sol`, `*Test*.sol`, `*Mock*.sol`)
 
-Every run reads a tiered attack checklist before scanning: 66 core vectors, plus token-standard-specific vectors loaded on demand (11 ERC721, 10 ERC1155, 8 ERC4626, 7 ERC4337) — only the standards actually present in the code are loaded. Beyond the checklist, the model applies adversarial reasoning to catch project-specific logic bugs that don't map to any named vector. Findings below the confidence threshold are suppressed into a summary table. With `--file-output`, the full report is saved to `assets/findings/`.
+Every run reads a tiered attack checklist before scanning: 65 core vectors, plus token-standard-specific vectors loaded on demand (11 ERC721, 10 ERC1155, 8 ERC4626, 7 ERC4337) — only the standards actually present in the code are loaded. Beyond the checklist, the model applies adversarial reasoning to catch project-specific logic bugs that don't map to any named vector. Findings below the confidence threshold are suppressed into a summary table. With `--file-output`, the full report is saved to `assets/findings/`.
 
 ## Performance
 

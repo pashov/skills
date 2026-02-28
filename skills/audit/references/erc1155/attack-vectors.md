@@ -54,13 +54,3 @@
 - **Detect:** Protocol implements access control by checking ERC1155 token balance: `require(balanceOf(msg.sender, ADMIN_ROLE_ID) > 0)` or `require(balanceOf(msg.sender, MINTER_ROLE_ID) >= 1)`. The role token IDs (`ADMIN_ROLE_ID`, `MINTER_ROLE_ID`) are public constants. If the ERC1155 `mint` function for those IDs is not separately access-controlled — e.g., it's callable by any holder of a lower-tier token, or via a public presale — any attacker can acquire the role token and gain elevated privileges. Role tokens are also transferable by default, creating a secondary market for protocol permissions.
 - **FP:** Minting of all role-designated token IDs is gated behind a separate access control system (e.g., OZ `AccessControl` with `MINTER_ROLE` on the ERC1155 contract itself). Role tokens for privileged IDs are non-transferable: `_beforeTokenTransfer` reverts for those IDs when `from != address(0) && to != address(0)`. Protocol uses a dedicated non-token access control system rather than ERC1155 balances for privilege gating.
 
----
-
-## Severity Guide
-
-| Severity     | Criteria                                                                     |
-| ------------ | ---------------------------------------------------------------------------- |
-| **CRITICAL** | Direct theft of funds, permanent loss of user assets, protocol takeover      |
-| **HIGH**     | Significant loss possible with moderate preconditions, broken core invariant |
-| **MEDIUM**   | Limited loss or requires specific conditions; DoS without permanent damage   |
-| **LOW**      | Best practice violation, minor accounting issue, limited impact              |
