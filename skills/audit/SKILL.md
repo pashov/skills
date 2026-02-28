@@ -170,10 +170,10 @@ Remove any finding fully subsumed by another. The goal is a clean, non-redundant
 
 ### Step 5 — Write report to file
 
-Get the current timestamp with `date +%Y%m%d-%H%M%S`. Create the directory `assets/findings/` if it does not exist. Write the full report to `assets/findings/report-{timestamp}.md`. Do not print the report to the terminal — instead print only:
+Get the current timestamp with `date +%Y%m%d-%H%M%S`. Derive the project name from the basename of the repository root directory (e.g. if the path is `/home/user/my-project`, the project name is `my-project`). Create the directory `assets/findings/` if it does not exist. Write the full report to `assets/findings/{project-name}-pashov-ai-audit-report-{timestamp}.md`. Do not print the report to the terminal — instead print only:
 
 ```
-Report saved → assets/findings/report-{timestamp}.md
+Report saved → assets/findings/{project-name}-pashov-ai-audit-report-{timestamp}.md
 {N} findings  ({critical} critical · {high} high · {medium} medium · {low} low)
 ```
 

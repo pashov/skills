@@ -4,7 +4,7 @@
 
 Open the report with this disclaimer block, verbatim:
 
-> ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. For a consultation regarding your projects' security, visit https://www.pashov.com
+> ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. For a consultation regarding your projects' security, visit [https://www.pashov.com](https://www.pashov.com)
 
 ---
 
@@ -25,10 +25,20 @@ Do not report INFO findings.
 
 ## Output Format
 
-```
+````
 # 🔐 Security Review — <ContractName or repo name>
 
-> ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. Team security reviews, bug bounty programs, and on-chain monitoring are strongly recommended.
+> ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. Team security reviews, bug bounty programs, and on-chain monitoring are strongly recommended. For security consulting, contact www.pashov.com
+
+---
+
+## Scope
+
+|                                  |                                                        |
+| -------------------------------- | ------------------------------------------------------ |
+| **Mode**                         | ALL / default / filename                               |
+| **Files reviewed**               | `File1.sol` · `File2.sol`<br>`File3.sol` · `File4.sol` |
+| **Confidence threshold (1-100)** | N                                                      |
 
 ---
 
@@ -61,7 +71,7 @@ Do not report INFO findings.
 ```diff
 - vulnerable line(s)
 + fixed line(s)
-```
+````
 
 <One sentence confirming the attack path no longer succeeds with this fix applied.>
 
@@ -72,19 +82,12 @@ Do not report INFO findings.
 
 ---
 
-## Scope
+## Suppressed Findings
 
-| | |
-|---|---|
-| **Mode** | ALL / default / filename |
-| **Files reviewed** | `File1.sol` · `File2.sol`<br>`File3.sol` · `File4.sol` |
-| **Confidence threshold (1-100)** | N |
+| Confidence | Location            | Description                                                  |
+| ---------- | ------------------- | ------------------------------------------------------------ |
+| N          | `Contract.function` | One-sentence summary of the issue and why it was suppressed. |
 
-**Suppressed findings (below threshold)**
-
-| Confidence | Location | Description |
-|---|---|---|
-| N | `Contract.function` | One-sentence summary of the issue and why it was suppressed. |
 ```
 
 **Rules:**
@@ -99,6 +102,7 @@ Do not report INFO findings.
 - Separate each finding with `---`.
 - Fix must include a fenced diff code block showing the exact lines to change, followed by one sentence confirming the fix eliminates the attack path.
 - The disclaimer is always printed, even when there are no findings.
-- Scope is a two-column table, not a prose paragraph.
+- Scope is a two-column table immediately after the disclaimer, not a prose paragraph.
 - The "Confidence threshold" label always reads `Confidence threshold (1-100)`.
-- Suppressed findings are always rendered as a three-column table (`Confidence · Location · Description`) below the main Scope table, not as prose. One row per suppressed finding. Descriptions are one sentence: what the issue is and why it was suppressed.
+- Suppressed findings appear at the end of the report as a `## Suppressed Findings` section rendered as a three-column table (`Confidence · Location · Description`), not as prose. One row per suppressed finding. Descriptions are one sentence: what the issue is and why it was suppressed.
+```
