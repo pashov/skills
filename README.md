@@ -21,7 +21,21 @@ Drop a skill into Claude Code and it gains a focused, reusable capability — wo
 
 ## Install
 
-TODO
+Clone this repo, then copy the skill folder into Claude Code's commands directory.
+
+**Global** — available in every project:
+
+```bash
+cp -r skills/audit ~/.claude/commands/
+```
+
+**Local** — available in the current project only:
+
+```bash
+cp -r skills/audit .claude/commands/
+```
+
+The skill is then invocable as `/audit`. Replace `audit` with any skill name from the table above.
 
 ---
 
