@@ -61,7 +61,7 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 - Title the report with a lock emoji and the repo or contract name.
 - Order findings by confidence score, highest first, in both the table and the detail sections.
 - Number findings sequentially; the number in the table matches the heading number.
-- The Confidence column combines the indicator and score (e.g., `🔴 95`). Indicators: 🔴 > 90, 🟡 70–90, 🔵 < 70. Each finding heading is preceded by its indicator.
+- The Confidence column combines the indicator and score (e.g., `🔴 95`). Indicators: 🔴 > 90, 🟡 75–90, 🔵 < 75. Each finding heading is preceded by its indicator.
 - Location and Confidence appear as a single inline line below the heading: `` `Contract.fn` · Confidence: N ``.
 - Description and Fix are each a bold label on its own line followed by the content on the next line.
 - Separate each finding with `---`.
