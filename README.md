@@ -29,6 +29,12 @@ The skill is then invocable as `/<skill-name>` (e.g., `/audit`).
 
 ---
 
+## See Pashov Skills in Action
+
+![Pashov Skills Demo](static/skill_pag.gif)
+
+---
+
 ## Contributing · Security · License
 
 We welcome improvements and fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR process.
