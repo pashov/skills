@@ -1,0 +1,72 @@
+name: Skill Smoke
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - 'solidity-auditor/**'
+      - '.github/workflows/skill-smoke.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate skill structure
+        run: |
+          set -euo pipefail
+
+          required_files=(
+            "solidity-auditor/SKILL.md"
+            "solidity-auditor/VERSION"
+            "solidity-auditor/README.md"
+            "solidity-auditor/agents/openai.yaml"
+            "solidity-auditor/references/judging.md"
+            "solidity-auditor/references/report-formatting.md"
+            "solidity-auditor/references/agents/vector-scan-agent.md"
+            "solidity-auditor/references/agents/adversarial-reasoning-agent.md"
+            "solidity-auditor/references/attack-vectors/attack-vectors-1.md"
+            "solidity-auditor/references/attack-vectors/attack-vectors-2.md"
+            "solidity-auditor/references/attack-vectors/attack-vectors-3.md"
+            "solidity-auditor/references/attack-vectors/attack-vectors-4.md"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "Missing required file: $file"
+              exit 1
+            fi
+          done
+
+          frontmatter=$(awk '
+            NR == 1 { if ($0 != "---") exit 2; next }
+            $0 == "---" { exit }
+            { print }
+          ' solidity-auditor/SKILL.md) || {
+            echo "Invalid SKILL.md frontmatter"
+            exit 1
+          }
+
+          echo "$frontmatter" | grep -Eq '^name:[[:space:]]*solidity-auditor$' || {
+            echo "SKILL.md missing required frontmatter field: name"
+            exit 1
+          }
+
+          echo "$frontmatter" | grep -Eq '^description:[[:space:]]*.+$' || {
+            echo "SKILL.md missing required frontmatter field: description"
+            exit 1
+          }
+
+          grep -Eq '^policy:' solidity-auditor/agents/openai.yaml || {
+            echo "openai.yaml missing policy block"
+            exit 1
+          }
+
+          grep -Eq 'allow_implicit_invocation:[[:space:]]*false' solidity-auditor/agents/openai.yaml || {
+            echo "openai.yaml must set allow_implicit_invocation: false"
+            exit 1
+          }
+
+          echo "Skill smoke checks passed."

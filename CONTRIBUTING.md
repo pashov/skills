@@ -12,7 +12,7 @@
 
 - [ ] No API keys, tokens, or sensitive data
 - [ ] No fabricated examples — outputs must reflect real model responses
-- [ ] Skill works with Claude Code CLI, VS Code, and Cursor
+- [ ] Skill works with Claude Code CLI / VS Code / Cursor and Codex
 
 ## What to Contribute
 
@@ -26,6 +26,7 @@
 Use the [Bug Report](.github/ISSUE_TEMPLATE/bug_report.md) issue template and include:
 
 - Which skill is affected and how you invoked it.
-- The Claude model used (e.g., claude-sonnet-4-6).
+- Runtime used (Claude or Codex).
+- Model used.
 - The input you gave and the output you got.
 - What you expected instead.

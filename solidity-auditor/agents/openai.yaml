@@ -1,0 +1,6 @@
+interface:
+  display_name: "Solidity Auditor"
+  short_description: "Fast Solidity security review while you develop"
+
+policy:
+  allow_implicit_invocation: false

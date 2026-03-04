@@ -1,6 +1,6 @@
 # Pashov Audit Group Skills
 
-> Claude Code skills for Solidity security and development — built by [Pashov Audit Group](https://www.pashov.com/).
+> AI skills for Solidity security and development — built by [Pashov Audit Group](https://www.pashov.com/).
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -9,18 +9,30 @@
 
 ## Install & Run
 
-Works with the **Claude Code CLI**, the **VS Code Claude extension**, and **Cursor**. Run the following in your terminal:
+### Claude Code (CLI, VS Code extension, Cursor)
 
 ```bash
 git clone https://github.com/pashov/skills.git && cp -r skills/solidity-auditor ~/.claude/commands/solidity-auditor
 ```
 
-The skill is then invocable as `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
+Invoke with `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
 
-**Update to latest:** `cd` into the cloned `skills` repo and run:
+### Codex
 
 ```bash
-git pull && cp -r solidity-auditor ~/.claude/commands/solidity-auditor
+git clone https://github.com/pashov/skills.git && mkdir -p ~/.agents/skills/solidity-auditor && cp -r skills/solidity-auditor/. ~/.agents/skills/solidity-auditor/
+```
+
+Restart Codex after install. Invoke with `$solidity-auditor` (or select it via `/skills`).
+
+### Update to latest
+
+`cd` into the cloned `skills` repo and run:
+
+```bash
+git pull
+cp -r solidity-auditor ~/.claude/commands/solidity-auditor
+mkdir -p ~/.agents/skills/solidity-auditor && cp -r solidity-auditor/. ~/.agents/skills/solidity-auditor/
 ```
 
 ---

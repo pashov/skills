@@ -18,6 +18,8 @@ _Portrayed below: finding multiple high-confidence vulnerabilities in a codebase
 
 ## Usage
 
+### Claude
+
 ```bash
 # Scan the full repo (default)
 /solidity-auditor
@@ -31,6 +33,16 @@ _Portrayed below: finding multiple high-confidence vulnerabilities in a codebase
 
 # Write report to a markdown file (terminal-only by default)
 /solidity-auditor --file-output
+```
+
+### Codex
+
+```text
+$solidity-auditor
+$solidity-auditor deep
+$solidity-auditor src/Vault.sol
+$solidity-auditor src/Vault.sol src/Router.sol
+$solidity-auditor --file-output
 ```
 
 ## Known Limitations
