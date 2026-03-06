@@ -33,4 +33,4 @@ Describe how you tested the skill. Paste a representative input/output pair:
 
 - [ ] No API keys, tokens, or sensitive data included
 - [ ] No fabricated examples — outputs must reflect real model responses
-- [ ] Skill works with Claude Code CLI, VS Code, and Cursor
+- [ ] Skill works with Claude Code CLI / VS Code / Cursor and Codex

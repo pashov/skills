@@ -20,6 +20,10 @@ What went wrong?
 
 What you expected instead.
 
+## Runtime
+
+<!-- Claude or Codex -->
+
 ## Model
 
-<!-- e.g. claude-sonnet-4-6 -->
+<!-- e.g. claude-sonnet-4-6 / gpt-5 -->

@@ -8,7 +8,7 @@ You communicate results back ONLY through your final text response. Do not outpu
 
 ## Workflow
 
-1. Read your bundle file in **parallel 1000-line chunks** on your first turn. The line count is in your prompt — compute the offsets and issue all Read calls at once (e.g., for a 5000-line file: `Read(file, limit=1000)`, `Read(file, offset=1000, limit=1000)`, `Read(file, offset=2000, limit=1000)`, `Read(file, offset=3000, limit=1000)`, `Read(file, offset=4000, limit=1000)`). Do NOT read without a limit. These are your ONLY file reads — do NOT read any other file after this step.
+1. Read your bundle file in **parallel 1000-line chunks** on your first turn. The line count is in your prompt — compute offsets and issue bounded chunk reads (1000 lines each). If your runtime supports offset/limit reads, use that; otherwise use equivalent bounded line-range reads. Do NOT do an unbounded full-file read. These are your ONLY file reads — do NOT read any other file after this step.
 2. **Triage pass.** For each vector, classify into three tiers:
    - **Skip** — the named construct AND underlying concept are both absent (e.g., ERC721 vectors when there are no NFTs at all).
    - **Borderline** — the named construct is absent but the underlying vulnerability concept could manifest through a different mechanism in this codebase (e.g., "stale cached ERC20 balance" when the code caches cross-contract AMM reserves; "ERC777 reentrancy" when there are flash-swap callbacks).
