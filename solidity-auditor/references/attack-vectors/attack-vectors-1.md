@@ -1,6 +1,6 @@
 # Attack Vectors Reference (1/4)
 
-170 total attack vectors
+173 total attack vectors
 
 ---
 

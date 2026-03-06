@@ -1,6 +1,6 @@
 # Attack Vectors Reference (4/4)
 
-170 total attack vectors
+173 total attack vectors
 
 ---
 
@@ -239,3 +239,22 @@
 
 - **D:** Contract hashes raw calldata for uniqueness (`processedHashes[keccak256(msg.data)]`). Dynamic-type ABI encoding uses offset pointers — multiple distinct calldata layouts decode to identical values. Attacker bypasses dedup with semantically equivalent but bytewise-different calldata.
 - **FP:** Uniqueness check hashes decoded parameters: `keccak256(abi.encode(decodedParams))`. Nonce-based replay protection. Only fixed-size types in signature (no encoding ambiguity).
+
+---
+
+---
+
+**171. Unexpected Ether (this.balance)**
+
+- **D:** Contract relies on strict equality `this.balance == value` for state transitions. Attacker forcibly sends Ether via `selfdestruct` or pre-computation to manipulate the balance and bypass logic.
+- **FP:** Contract tracks deposited Ether via a self-defined variable, or inequality (`this.balance >= value`) is used and safely handled.
+
+**172. Short Address/Parameter Attack**
+
+- **D:** External applications or exchanges pass short parameters (e.g., 19-byte address instead of 20) during contract interaction. The EVM pads the missing bytes with trailing zeros, potentially multiplying the subsequent `amount` parameter.
+- **FP:** Input validation exists within the off-chain system, or contract explicitly verifies `msg.data.length` against the expected parameter size.
+
+**173. Unchecked Low-Level Call Return Value**
+
+- **D:** The boolean return value of a low-level `call`, `delegatecall`, or `send` is ignored. If the external call reverts or fails (e.g. out of gas), execution silently continues, leading to state inconsistencies like credited balances without actual transfers.
+- **FP:** Return value is captured and explicitly checked via `require(success, "...");` or equivalent error handling.
