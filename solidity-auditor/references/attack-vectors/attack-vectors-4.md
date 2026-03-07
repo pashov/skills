@@ -1,6 +1,6 @@
 # Attack Vectors Reference (4/4)
 
-170 total attack vectors
+219 total attack vectors
 
 ---
 
@@ -82,6 +82,7 @@
 
 - **D:** Oracle returns a technically valid but extreme price (e.g., ETH at $0.01 during a flash crash). No min/max sanity bound or deviation check against historical/secondary price. Protocol executes liquidations or swaps at wildly incorrect prices.
 - **FP:** Circuit breaker: `require(price >= MIN_PRICE && price <= MAX_PRICE)`. Deviation check against secondary oracle source. Heartbeat + price-change-rate limiting.
+- **Scope:** Covers missing min/max price bounds and deviation checks only. Basic staleness checks (`updatedAt`, `answeredInRound >= roundId`, `answer > 0`) are covered by V69 — do not duplicate findings for missing staleness validation under this vector.
 
 **142. DVN Collusion or Insufficient DVN Diversity**
 
@@ -239,3 +240,53 @@
 
 - **D:** Contract hashes raw calldata for uniqueness (`processedHashes[keccak256(msg.data)]`). Dynamic-type ABI encoding uses offset pointers — multiple distinct calldata layouts decode to identical values. Attacker bypasses dedup with semantically equivalent but bytewise-different calldata.
 - **FP:** Uniqueness check hashes decoded parameters: `keccak256(abi.encode(decodedParams))`. Nonce-based replay protection. Only fixed-size types in signature (no encoding ambiguity).
+
+**171. Reward Accrual During Zero-Depositor Period**
+
+- **D:** Time-based reward distribution starts at vault deployment but no depositors exist yet. First depositor claims all rewards accumulated during the empty period regardless of deposit size or timing.
+- **FP:** Rewards only accrue when `totalSupply > 0`. Reward start time set on first deposit. Unclaimed pre-deposit rewards sent to treasury or burned.
+
+**172. MEV Withdrawal Before Bad Debt Socialization**
+
+- **D:** External event (liquidation, exploit, depeg) causes vault loss. MEV actor observes pending loss-causing tx in mempool and front-runs a withdrawal at pre-loss share price, leaving remaining depositors to absorb the full loss.
+- **FP:** Withdrawals require time-delayed request queue (epoch-based or cooldown). Loss realization and share price update are atomic. Private mempool used for liquidation txs.
+
+**173. Vault Insolvency via Accumulated Rounding Dust**
+
+- **D:** Vault tracks `totalAssets` as a storage variable separate from `token.balanceOf(vault)`. Solidity's floor rounding on each deposit/withdrawal creates tiny overages — user receives 1 wei more than burned shares represent. Over many operations `totalAssets` exceeds actual balance, causing last withdrawers to revert.
+- **FP:** Rounding consistently favors the vault (round shares up on deposit, round assets down on withdrawal). OZ Math with `Rounding.Ceil`/`Rounding.Floor` applied correctly.
+
+**174. FIFO Withdrawal Ordering Degrades Yield**
+
+- **D:** Aggregator vault withdraws from sub-vaults in fixed FIFO order, depleting highest-APY vaults first. Remaining capital concentrates in lowest-yield positions, reducing overall returns for all depositors.
+- **FP:** Withdrawal ordering sorted by APY ascending (lowest-yield first). Dynamic rebalancing after withdrawals. Single underlying vault (no ordering issue).
+
+**175. ERC4626 convertToAssets Used Instead of previewWithdraw**
+
+- **D:** Integration calls `convertToAssets(shares)` to estimate withdrawal proceeds. Per ERC4626 spec this excludes fees and slippage — actual redeemable amount is lower. Downstream logic (health checks, rebalancing, UI) operates on inflated values.
+- **FP:** `previewWithdraw()` or `previewRedeem()` used for actual withdrawal estimates. Vault charges no withdrawal fees. Fee delta accounted separately.
+
+**176. Unclaimed Reward Tokens from Underlying Protocol**
+
+- **D:** Vault deposits into yield protocol (Morpho, Aave, Convex) that emits reward tokens. Vault never calls `claim()` or lacks logic to distribute claimed rewards to depositors. Rewards accumulate indefinitely in the vault or underlying protocol, inaccessible to shareholders.
+- **FP:** Explicit `claimRewards()` function harvests and distributes. Reward tokens tracked dynamically (mapping, not hardcoded list). Vault sweeps unexpected token balances to treasury.
+
+**177. Idle Asset Dilution from Sub-Vault Deposit Caps**
+
+- **D:** Parent/aggregator vault accepts deposits without checking sub-vault capacity. When sub-vaults hit their deposit caps, excess assets sit idle in the parent — earning zero yield but diluting share price for all depositors.
+- **FP:** `maxDeposit()` reflects combined sub-vault remaining capacity. Deposits revert when no productive capacity remains. Idle assets auto-routed to fallback yield source.
+
+**227. Protocol Fee Inflates Reward Accumulator**
+
+- **D:** Protocol fee routed to treasury is processed through the same `rewardPerToken` accumulator as staker rewards. The accumulator increments as if all distributed tokens go to stakers, but part went to treasury — stakers' `earned()` returns more than the contract holds.
+- **FP:** Fee deducted before updating accumulator: `rewardPerToken += (reward - fee) / totalStaked`. Separate accounting for fees and rewards. Fee transferred directly, not through reward distribution.
+
+**228. Profit Tracking Underflow Blocks Withdrawals**
+
+- **D:** Vault tracks cumulative strategy profit. When a strategy reports a loss exceeding its recorded profit, `totalProfit -= loss` underflows (reverts on 0.8+). All withdrawal functions that read `totalProfit` are permanently bricked.
+- **FP:** Loss capped: `totalProfit -= min(loss, totalProfit)`. Signed integer used for profit/loss tracking. Per-strategy profit tracking (one strategy's loss doesn't affect others).
+
+**229. Share Redemption at Optimistic Rate**
+
+- **D:** Shares redeemed at a projected end-of-term exchange rate rather than the current realized rate. Early redeemers receive more than their proportional share of actual assets — late redeemers find the vault depleted.
+- **FP:** Redemption uses current `totalAssets / totalSupply`, not projected rate. Withdrawal queue with pro-rata distribution. Mark-to-market valuation updated on each interaction.

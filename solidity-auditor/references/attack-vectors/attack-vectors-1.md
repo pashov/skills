@@ -1,6 +1,6 @@
 # Attack Vectors Reference (1/4)
 
-170 total attack vectors
+219 total attack vectors
 
 ---
 
@@ -24,10 +24,6 @@
 - **D:** Cross-token math uses hardcoded `1e18` or assumes identical decimals. Pattern: collateral/LTV/rate calculations combining token amounts without per-token `decimals()` normalization.
 - **FP:** Amounts normalized to canonical precision (WAD/RAY) using each token's `decimals()`. Explicit `10 ** (18 - decimals())` scaling. Protocol only supports tokens with identical verified decimals.
 
-**5. Block Timestamp Dependence**
-
-- **D:** `block.timestamp` used for game outcomes, randomness (`block.timestamp % N`), or auction timing where ~15s manipulation changes outcome.
-- **FP:** Timestamp used only for hour/day-scale periods. Timestamp used only for event logging with no state effect.
 
 **6. Beacon Proxy Single-Point-of-Failure Upgrade**
 
@@ -132,10 +128,6 @@
 - **D:** Deployment tx replayed on another chain. Same deployer nonce on both chains produces same CREATE address under different control. No EIP-155 chain ID protection. Ref: Wintermute.
 - **FP:** EIP-155 signatures. `CREATE2` via deterministic factory at same address on all chains. Per-chain deployer EOAs.
 
-**25. DoS via Unbounded Loop**
-
-- **D:** Loop over user-growable unbounded array: `for (uint i = 0; i < users.length; i++)`. Eventually hits block gas limit.
-- **FP:** Array length capped at insertion: `require(arr.length < MAX)`. Loop iterates fixed small constant.
 
 **26. Precision Loss - Division Before Multiplication**
 
@@ -229,3 +221,78 @@
 
 - **D:** OApp uses ordered nonce execution. If one message permanently reverts on destination (e.g., recipient contract reverts, invalid state), ALL subsequent messages from that source are blocked. Attacker intentionally sends a poison message to freeze the entire channel.
 - **FP:** Unordered nonce mode used (LayerZero V2 default). `_lzReceive` wrapped in try/catch with fallback logic. `NonblockingLzApp` pattern (V1). Admin can `skipPayload` / `clearPayload` to unblock. Ref: Code4rena Maia DAO finding #883.
+
+**178. Memory Struct Copy Not Written Back to Storage**
+
+- **D:** `MyStruct memory s = myMapping[key]` creates a memory copy. Modifications to `s` do not persist — storage remains unchanged. Common in reward updates, position tracking, and config changes where the developer assumes memory aliases storage.
+- **FP:** Uses `storage` keyword: `MyStruct storage s = myMapping[key]`. Explicitly writes back: `myMapping[key] = s` after modification.
+
+**179. On-Chain Slippage Computed from Manipulated Pool**
+
+- **D:** `amountOutMin` calculated on-chain by querying the same pool that will execute the swap. Attacker manipulates the pool before the tx, making both the quote and the swap reflect the manipulated state — slippage check passes despite sandwich.
+- **FP:** `amountOutMin` supplied by the caller (off-chain quote). Uses a separate oracle for the floor price. TWAP-based minimum.
+
+**180. Withdrawal Queue Bricked by Zero-Amount Entry**
+
+- **D:** FIFO withdrawal queue processes entries sequentially. A cancelled or zeroed-out entry causes the loop to `break` or revert on zero amount instead of skipping it, permanently blocking all subsequent withdrawals behind it.
+- **FP:** Queue skips zero-amount entries. Cancellation removes the entry or marks it processed. Queue uses linked list allowing removal.
+
+**181. Lazy Epoch Advancement Skips Reward Periods**
+
+- **D:** Epoch counter advances only on user interaction. If no one interacts during an epoch, it is never advanced — rewards for that period are miscalculated, lost, or retroactively applied to the wrong epoch when the next interaction occurs.
+- **FP:** Keeper or automation advances epochs independently. Epoch catch-up loop processes all skipped epochs on next interaction. Continuous (non-epoch) reward accrual.
+
+**182. Reward Rate Changed Without Settling Accumulator**
+
+- **D:** Admin updates the emission rate but `updateReward()` / `updatePool()` is not called first. The new rate is retroactively applied to the entire elapsed period since the last update, overpaying or underpaying rewards for that window.
+- **FP:** Rate-change function calls `updateReward()` before applying the new rate. Modifier auto-settles on every state change.
+
+**183. Liquidated Position Continues Accruing Rewards**
+
+- **D:** Position is liquidated (balance zeroed, collateral seized) but is not removed from the reward distribution system. `rewardDebt` and accumulated rewards are not reset — the liquidated user earns phantom rewards, or the rewards are locked permanently.
+- **FP:** Liquidation calls `_withdrawRewards()` or equivalent before zeroing the position. Reward system checks `balance > 0` before accruing.
+
+**184. Cached Reward Debt Not Reset After Claim**
+
+- **D:** After `claimRewards()`, the cached reward amount (`pendingReward` or `rewardDebt`) is not zeroed. On the next claim cycle, the full cached amount is paid again — double (or repeated) payout.
+- **FP:** `pendingReward[user] = 0` after transfer. `rewardDebt` recalculated from current balance and accumulator after claim.
+
+**185. Emission Distribution Before Period Update**
+
+- **D:** `distribute()` reads the contract's token balance before `updatePeriod()` mints or transfers new emissions. New rewards arrive after distribution already executed — they sit idle until the next cycle, underpaying the current period.
+- **FP:** `updatePeriod()` called before `distribute()` in the same tx. Emissions pre-funded before distribution window opens.
+
+**186. Pause Modifier Blocks Liquidations**
+
+- **D:** `whenNotPaused` applied broadly to all external functions including `liquidate()`. During a pause, interest accrues and prices move but positions cannot be liquidated — bad debt accumulates unchecked until unpause.
+- **FP:** Liquidation functions exempt from pause. Separate `pauseLiquidations` flag with independent governance. Interest accrual also paused.
+
+**187. Liquidation Arithmetic Reverts at Extreme Price Drops**
+
+- **D:** When collateral price drops 95%+, liquidation math overflows or underflows — e.g., `collateralNeeded = debt / price` becomes enormous, exceeding available collateral. The liquidation function reverts, making the position unliquidatable and locking bad debt.
+- **FP:** Liquidation caps `collateralSeized` at position's total collateral. Graceful handling of underwater positions (full seizure, remaining bad debt socialized).
+
+**188. Borrower Front-Runs Liquidation**
+
+- **D:** Borrower observes pending `liquidate()` tx in mempool, front-runs with minimal repayment or collateral top-up to push health factor above threshold. Immediately re-borrows after liquidation tx fails. Repeated indefinitely to maintain risky position.
+- **FP:** Liquidation uses flash-loan-resistant health check (same-block deposit doesn't count). Minimum repayment cooldown. Dutch auction liquidation (no fixed threshold to game).
+
+**189. Liquidation Discount Applied Inconsistently Across Code Paths**
+
+- **D:** One code path calculates debt at face value, another applies a liquidation discount. When the discounted amount is subtracted from the non-discounted amount, the result underflows or leaves residual bad debt unaccounted.
+- **FP:** Discount applied consistently in all paths touching liquidation accounting. Single source of truth for discounted value.
+
+**190. No Buffer Between Max LTV and Liquidation Threshold**
+
+- **D:** Max borrowable LTV equals the liquidation threshold. A borrower at max LTV is immediately liquidatable on any adverse price tick. Combined with origination fees, positions can be born underwater.
+- **FP:** Max LTV is meaningfully lower than liquidation threshold (e.g., 80% vs 85%). Origination fee deducted from borrowed amount, not added to debt.
+
+**191. Same-Block Vote-Transfer-Vote**
+
+- **D:** Governance reads voting power at current block, not a past snapshot. User votes, transfers tokens to a second wallet in the same block, and votes again — doubling their effective vote weight.
+- **FP:** `getPastVotes(block.number - 1)` or proposal-creation snapshot. Voting power locked on first vote until proposal closes. ERC20Votes with checkpoint-based historical balances.
+
+**192. Quorum Computed from Live Supply, Not Snapshot**
+
+- **D:** `quorum = totalSupply() * quorumBps / 10000` reads current supply. After a proposal is created, an attacker mints tokens (or deposits to inflate supply), lowering the effective quorum percentage needed to pass.
+- **FP:** Quorum snapshotted at proposal creation: `totalSupply(proposalSnapshot)`. Fixed absolute quorum amount. Supply changes do not affect active proposals.
