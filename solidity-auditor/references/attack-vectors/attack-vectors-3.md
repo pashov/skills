@@ -1,6 +1,6 @@
 # Attack Vectors Reference (3/4)
 
-170 total attack vectors
+219 total attack vectors
 
 ---
 
@@ -48,6 +48,7 @@
 
 - **D:** (a) Chainlink aggregator address hardcoded/immutable with no update path — deprecated feed returns stale/zero price. (b) Assumes `feed.decimals() == 8` without runtime check — some feeds return 18 decimals, causing 10^10 scaling error.
 - **FP:** Feed address updatable via governance. `feed.decimals()` called and used for normalization. Secondary oracle deviation check.
+- **Scope:** Covers feed deprecation and decimal assumptions only. Basic staleness checks (`updatedAt`, `answeredInRound >= roundId`, `answer > 0`) are covered by V69 — do not duplicate findings for missing staleness validation under this vector.
 
 **94. Upgrade Race Condition / Front-Running**
 
@@ -229,3 +230,68 @@
 
 - **D:** `depositor[tokenId] = msg.sender` without checking `nft.ownerOf(tokenId)`. Approved operator (not owner) calls stake — transfer succeeds via approval, operator credited as depositor.
 - **FP:** Reads `nft.ownerOf(tokenId)` before transfer and records actual owner. Or `require(nft.ownerOf(tokenId) == msg.sender)`.
+
+**211. Interest Accrual Rounds to Zero but Timestamp Advances**
+
+- **D:** `interest = rate * timeDelta / SECONDS_PER_YEAR` rounds to zero when `timeDelta` is small (e.g., <207s at 15% APR). But `lastAccrualTime = block.timestamp` is still updated — the fractional interest is permanently lost, not deferred to the next accrual.
+- **FP:** Accumulator uses sufficient precision (e.g., RAY = 1e27) to avoid zero rounding at per-block intervals. `lastAccrualTime` only advances when computed interest > 0.
+
+**212. Permissionless accrueInterest Griefing**
+
+- **D:** `accrueInterest()` is permissionless and updates `lastAccrualTime` on every call. Attacker calls it at very short intervals — each call computes zero interest (rounding) but advances the timestamp, systematically suppressing interest accumulation to near-zero.
+- **FP:** Minimum accrual interval enforced: `require(block.timestamp - lastAccrualTime >= MIN_INTERVAL)`. Precision high enough that per-block interest > 0. Access-restricted accrual.
+
+**213. notifyRewardAmount Overwrites Active Reward Period**
+
+- **D:** Calling `notifyRewardAmount(newAmount)` replaces the current reward period. Remaining undistributed rewards from the old period are silently lost — not carried forward. Admin or attacker can erase pending rewards by notifying a smaller amount.
+- **FP:** New notification adds to remaining: `rewardRate = (newAmount + remaining) / duration`. Only callable by designated distributor with timelock. Remaining rewards refunded before reset.
+
+**214. Governance Proposal Executable Before Voting Period Ends**
+
+- **D:** `execute()` checks quorum and majority but not `block.timestamp >= proposal.endTime`. Once quorum is met, the proposal can be executed immediately — cutting the voting window short, preventing opposing votes from being cast.
+- **FP:** `require(block.timestamp >= proposal.endTime)` in execute. OZ Governor enforces `ProposalState.Succeeded` which requires voting period to have ended.
+
+**215. Partial Liquidation Leaves Position in Worse State**
+
+- **D:** Partial liquidation seizes some collateral but does not enforce a minimum post-liquidation health factor. Liquidator cherry-picks the most valuable collateral, leaving the position with worse health than before — approaching full insolvency without triggering full liquidation.
+- **FP:** Post-liquidation health factor check: `require(healthFactor(position) >= MIN_HF)`. Full liquidation triggered below a floor threshold. Liquidator must bring position to target health factor.
+
+**216. Delegation to address(0) Blocks Token Transfers**
+
+- **D:** Delegating votes to `address(0)` causes `_beforeTokenTransfer` or `_update` hooks to revert when attempting to modify the zero-address delegate's checkpoint. All subsequent transfers and burns for that token holder permanently revert.
+- **FP:** Delegation to `address(0)` treated as undelegation (no-op or clears delegation). Hook skips checkpoint update when delegate is `address(0)`. OZ Votes implementation handles this case.
+
+**217. ERC4626 maxDeposit Returns Non-Zero When Paused**
+
+- **D:** `maxDeposit()` returns `type(uint256).max` even when the vault is paused. Integrating protocols (aggregators, routers) read this as "deposits accepted," attempt a deposit, and revert. Per ERC4626, `maxDeposit` must return 0 when deposits would revert.
+- **FP:** `maxDeposit()` returns 0 when paused. OZ ERC4626 with pausing override. Integrators use `try deposit()` with fallback.
+
+**219. Deprecated Gauge Blocks Claiming Accrued Rewards**
+
+- **D:** Killing or deprecating a gauge clears future distributions but also blocks the `claimReward()` path for already-accrued, unclaimed rewards. Users who earned rewards before deprecation cannot retrieve them.
+- **FP:** Kill only stops future accrual — claim function remains active for pre-kill balances. Rewards swept to fallback address on deprecation. Emergency claim path bypasses active-gauge check.
+
+**221. Liquidation Blocked by External Pool Illiquidity**
+
+- **D:** Liquidation function swaps collateral for debt token via an external DEX. If the DEX pool is drained or lacks liquidity, the swap reverts, making liquidation impossible. Bad debt accumulates while the pool remains illiquid.
+- **FP:** Liquidation accepts collateral directly without swap. Fallback liquidation path uses a different DEX or oracle price. Liquidator provides debt token and receives collateral.
+
+**222. No-Bid Auction Fails to Clear State**
+
+- **D:** Auction expires without any bids. The finalization function does not clear lien, auction, or escrow data — collateral remains locked in the auction contract with no path to return it to the owner or trigger a new auction.
+- **FP:** No-bid finalization returns collateral to owner and clears all associated state. Re-auction mechanism triggered automatically. Timeout-based collateral release.
+
+**223. Position Reduction Triggers Liquidation**
+
+- **D:** User attempts to improve health by partially repaying debt or withdrawing a small amount of excess collateral. The intermediate state (after collateral removal, before debt reduction) crosses the liquidation threshold — a bot liquidates the position mid-transaction or in the same block.
+- **FP:** Repay and collateral changes are atomic (single function). Health check applied only to final state, not intermediate. Liquidation grace period after position modification.
+
+**224. Repeated Liquidation of Same Position**
+
+- **D:** Liquidation function does not flag the position as liquidated. After partial liquidation, the position still appears undercollateralized — a second liquidator (or the same one) liquidates again, seizing collateral beyond what was intended.
+- **FP:** Position marked as `liquidated` or deleted after processing. Liquidation requires `status != Liquidated`. Post-liquidation health check prevents re-triggering.
+
+**225. Loan State Transition Before Interest Settlement**
+
+- **D:** Repaying principal sets the loan state to `Repaid` before accrued interest is settled. Once in `Repaid` state, the interest accrual function skips the loan — all accumulated interest becomes permanently uncollectable.
+- **FP:** `settleInterest()` called before state transition. Interest added to repayment amount: `require(msg.value >= principal + accruedInterest)`. State transition only after full settlement.

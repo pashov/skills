@@ -53,7 +53,20 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 ```
 ---
 
-< ... all findings >
+< ... all above-threshold findings >
+
+---
+
+[75] **3. <Title>**
+
+`ContractName.functionName` · Confidence: 75
+
+**Description**
+<The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+
+---
+
+< ... all below-threshold findings (description only, no Fix block) >
 
 ---
 
@@ -63,7 +76,6 @@ Findings List
 |---|---|---|
 | 1 | [95] | <title> |
 | 2 | [82] | <title> |
-| | | **Below Confidence Threshold** |
 | 3 | [75] | <title> |
 | 4 | [60] | <title> |
 

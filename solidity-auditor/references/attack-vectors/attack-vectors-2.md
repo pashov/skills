@@ -1,6 +1,6 @@
 # Attack Vectors Reference (2/4)
 
-170 total attack vectors
+219 total attack vectors
 
 ---
 
@@ -78,10 +78,6 @@
 - **D:** `previewDeposit` returns more shares than `deposit` mints, or `previewMint` charges fewer assets than `mint`. Custom `_convertToShares`/`_convertToAssets` with wrong `Math.mulDiv` rounding direction.
 - **FP:** OZ ERC4626 base without overriding conversion functions. Custom impl explicitly uses `Floor` for share issuance, `Ceil` for share burning.
 
-**57. Block Number as Timestamp Approximation**
-
-- **D:** Time computed as `(block.number - startBlock) * 13` assuming fixed block times. Variable across chains/post-Merge. Wrong interest/vesting/rewards.
-- **FP:** `block.timestamp` used for all time-sensitive calculations.
 
 **58. Transparent Proxy Admin Routing Confusion**
 
@@ -186,10 +182,6 @@
 - **D:** Assembly loads a value as a full 32-byte word (`calldataload`, `sload`, `mload`) but treats it as a smaller type (`address`, `uint128`, `uint8`, `bool`) without masking upper bits. Dirty bits cause incorrect comparisons, mapping key mismatches, or storage corruption. Pattern: `let addr := calldataload(4)` used directly without `and(addr, 0xffffffffffffffffffffffffffffffffffffffff)`.
 - **FP:** Explicit bitmask applied: `and(value, mask)` immediately after load. Value produced by a prior Solidity expression that already cleaned it. `shr(96, calldataload(offset))` pattern that naturally zeros upper bits for addresses.
 
-**77. Griefing via Dust Deposits Resetting Timelocks or Cooldowns**
-
-- **D:** Timelock/cooldown resets on any deposit with no minimum: `lastActionTime[user] = block.timestamp` inside `deposit(uint256 amount)` without `require(amount >= MIN)`. Attacker calls `deposit(1)` to reset victim's lock indefinitely.
-- **FP:** Minimum deposit enforced unconditionally. Cooldown resets only for depositing user. Lock assessed independently of deposit amounts per-user.
 
 **78. Returndatasize-as-Zero Assumption**
 
@@ -229,3 +221,78 @@
 
 - **D:** Contract holds rebasing tokens (stETH, AMPL, aTokens) and caches `balanceOf(this)`. After rebase, cached value diverges from actual balance.
 - **FP:** Rebasing tokens blocked at code level (revert/whitelist). Accounting reads `balanceOf` live. Wrapper tokens (wstETH) used.
+
+**193. Checkpoint Overwrite on Same-Block Operations**
+
+- **D:** Multiple delegate/transfer operations in the same block call `_writeCheckpoint()` with the same `block.number` key. Each overwrites the previous — binary search returns the first (incomplete) checkpoint, losing intermediate state.
+- **FP:** Checkpoint appends only when `block.number > lastCheckpoint.blockNumber`. Same-block operations accumulate into the existing checkpoint. Off-chain indexer used instead of on-chain lookups.
+
+**194. Self-Delegation Doubles Voting Power**
+
+- **D:** Delegating to self adds votes to the delegate (self) but does not subtract the undelegated balance. Voting power is counted twice — once as held tokens, once as delegated votes.
+- **FP:** Delegation logic subtracts from holder's direct balance when adding to delegate. Self-delegation is a no-op or explicitly handled. OZ Votes implementation used correctly.
+
+**195. Nonce Not Incremented on Reverted Execution**
+
+- **D:** Meta-transaction or permit nonce is checked before execution but only incremented on success. If the inner call reverts (after nonce check, before increment), the same signed message can be replayed until it eventually succeeds.
+- **FP:** Nonce incremented before execution (check-effects-interaction). Nonce incremented in both success and failure paths. Deadline-based expiry on signed messages.
+
+**197. Bridge Global Rate Limit Griefing**
+
+- **D:** Bridge enforces a global throughput cap (total value per window) not segmented by user. Attacker fills the rate limit by bridging cheap tokens back and forth, blocking all legitimate users from bridging during the cooldown window.
+- **FP:** Per-user rate limits. Rate limit segmented by token or route. Whitelist for high-value transfers. No global rate limit.
+
+**199. Self-Matched Orders Enable Wash Trading**
+
+- **D:** Order matching does not verify `maker != taker`. A user submits both sides of a trade to farm trading rewards, inflate volume metrics, bypass royalties (NFT), or extract fee rebates.
+- **FP:** `require(makerOrder.signer != takerOrder.signer)`. Volume-based rewards use time-weighted averages resistant to single-block spikes. Royalty enforced regardless of counterparty.
+
+**200. Dutch Auction Price Decay Underflow**
+
+- **D:** `currentPrice = startPrice - (decayRate * elapsed)`. When the auction runs past the point where price should reach zero, the subtraction underflows — reverting on 0.8+ or wrapping to `type(uint256).max` on <0.8. Auction becomes unfinishable.
+- **FP:** `currentPrice = elapsed >= duration ? reservePrice : startPrice - (decayRate * elapsed)`. Floor price enforced. `min()` used to cap decay.
+
+**201. Timelock Anchored to Deployment, Not Action**
+
+- **D:** Recovery or admin timelock measured from contract deployment or initialization, not from when the action was queued. Once the initial delay elapses, all future actions can execute instantly — the timelock is effectively permanent bypass.
+- **FP:** Timelock resets on each queued action. `executeAfter = block.timestamp + delay` set at queue time. OZ TimelockController pattern.
+
+**202. Withdrawal Rate Limit Bypassed via Share Transfer**
+
+- **D:** Per-address withdrawal limit: `require(withdrawn[msg.sender] + amount <= limitPerPeriod)`. User transfers vault shares to a fresh address and withdraws from there — each new address gets a fresh limit.
+- **FP:** Limit tracks the underlying position, not the address. Shares are non-transferable or transfer resets withdrawal allowance. KYC-bound withdrawal limits.
+
+**203. Blacklist and Whitelist Not Mutually Exclusive**
+
+- **D:** An address can hold both `BLACKLISTED` and `WHITELISTED` roles simultaneously. Whitelist-gated paths do not check the blacklist — a blacklisted address bypasses restrictions by also being whitelisted.
+- **FP:** Adding to blacklist auto-removes from whitelist (and vice versa). Single enum role per address. Both checks applied on every restricted path.
+
+**204. Dead Code After Return Statement**
+
+- **D:** Critical state update or validation (`require(success)`, `emit Event`, `nonce++`) placed after a `return` statement. The code is unreachable — failures go undetected, events are never emitted, state is never updated.
+- **FP:** All critical logic precedes `return`. Compiler warnings for unreachable code are addressed. Linter enforces no-unreachable-code rule.
+
+**205. Partial Redemption Fails to Reduce Tracked Total**
+
+- **D:** Withdrawal queue partially fills a redemption request but does not proportionally reduce `totalQueuedShares` or `totalPendingAssets`. The vault's tracked total remains inflated, skewing share price for all other depositors.
+- **FP:** Partial fill reduces tracked totals proportionally. Queue uses per-request tracking, not a global aggregate. Atomic full-or-nothing redemptions.
+
+**206. TWAP Accumulator Not Updated During Sync or Skim**
+
+- **D:** Pool's `sync()` or `skim()` function updates reserves but does not call `_update()` to advance the TWAP cumulative price accumulator. TWAP observations return stale values, enabling price manipulation through sync-then-trade sequences.
+- **FP:** `sync()` calls `_update()` before overwriting reserves. TWAP sourced from external oracle, not internal accumulator. Uniswap V3 `observe()` used (accumulator updated on every swap).
+
+**207. Expired Oracle Version Silently Assigned Previous Price**
+
+- **D:** In request-commit oracle patterns (Pyth, custom keepers), an expired or unfulfilled price request is assigned the last valid price instead of reverting or returning invalid. Pending orders execute at stale prices rather than being cancelled.
+- **FP:** Expired versions return `price = 0` or `valid = false`, forcing order cancellation. Staleness threshold enforced per-request. Fallback oracle used for expired primaries.
+
+**208. Funding Rate Derived from Single Trade Price**
+
+- **D:** Perpetual swap funding rate uses the last trade price as the mark price. A single self-trade at an extreme price skews the funding rate — the attacker profits from funding payments on their opposing position.
+- **FP:** Mark price derived from TWAP or external oracle index. Funding rate capped per period. Volume-weighted average price used.
+
+**209. Open Interest Tracked with Pre-Fee Position Size**
+
+- **D:** Open interest incremented by the full position size before fees are deducted. Actual exposure is smaller than recorded OI. Aggregate OI is permanently inflated, eventually hitting caps and blocking new positions.
+- **FP:** OI incremented by post-fee position size. OI decremented on close by same amount used at open. Periodic OI reconciliation.
