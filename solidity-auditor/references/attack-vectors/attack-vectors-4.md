@@ -1,7 +1,3 @@
-# Attack Vectors Reference (4/4)
-
-220 total attack vectors
-
 ---
 
 **166. Calldata Input Malleability**

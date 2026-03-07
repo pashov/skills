@@ -1,7 +1,3 @@
-# Attack Vectors Reference (2/4)
-
-220 total attack vectors
-
 ---
 
 **56. Cross-Chain Address Ownership Variance**
