@@ -35,13 +35,21 @@ You communicate results back ONLY through your final text response. Do not outpu
 
 6. **Pass 5 — Steal-the-funds challenge.** For each contract that holds or controls value, ask: "If I wanted to drain this contract, what is my best path?" Try at least two distinct approaches per value-holding contract. If both fail, explain in one line why. If either succeeds, it is a finding.
 
-7. For each confirmed finding, output in this exact format — nothing more:
+7. **Mandatory verification.** Before promoting any candidate to a finding, you MUST quote the exact function signature (including all modifiers like `nonReentrant`, `onlyOwner`, `whenNotPaused`) from your bundle. Then verify:
+   - Every modifier and access-control check on the function.
+   - The actual storage variable or mapping being read/written (not what you assume — what the code says).
+   - Whether the guard you claim is missing actually appears elsewhere in the call chain.
+
+   If you cannot find the exact line in your bundle, the finding is unverified — demote to LEAD or drop. **A single incorrect claim about the presence or absence of a modifier invalidates the entire finding.**
+
+8. For each confirmed finding, output in this exact format — nothing more:
    ```
    FINDING | location: Contract.function
+   signature: function foo(...) external nonReentrant onlyOwner  ← exact from code
    path: caller → function → state change → impact
    description: <one sentence>
    fix: <one-sentence suggestion or short diff>
    ```
 
-8. Do not output findings during analysis — compile them all and return them together as your final response.
-9. If you find NO findings, respond with "No findings."
+9. Do not output findings during analysis — compile them all and return them together as your final response.
+10. If you find NO findings, respond with "No findings."

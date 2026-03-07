@@ -22,9 +22,6 @@ _Portrayed below: finding multiple high-confidence vulnerabilities in a codebase
 # Scan the full repo (default)
 /solidity-auditor
 
-# Full repo + adversarial reasoning agent (slower, more thorough)
-/solidity-auditor deep
-
 # Review specific file(s)
 /solidity-auditor src/Vault.sol
 /solidity-auditor src/Vault.sol src/Router.sol
