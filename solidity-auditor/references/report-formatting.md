@@ -81,6 +81,15 @@ Findings List
 
 ---
 
+## Leads
+
+_Suspected issues where a concrete attack path could not be fully traced. Included for manual review — not scored._
+
+- **<Title>** — `Contract.function` — <1-2 sentence description of the suspected issue and why the path couldn't be completed>
+- **<Title>** — `Contract.function` — <1-2 sentence description>
+
+---
+
 > ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. Team security reviews, bug bounty programs, and on-chain monitoring are strongly recommended. For a consultation regarding your projects' security, visit [https://www.pashov.com](https://www.pashov.com)
 
 ````
