@@ -77,16 +77,15 @@ Findings List
 | 1 | [95] | <title> |
 | 2 | [82] | <title> |
 | 3 | [75] | <title> |
-| 4 | [60] | <title> |
 
 ---
 
 ## Leads
 
-_Suspected issues where a concrete attack path could not be fully traced. Included for manual review — not scored._
+_Vulnerability trails with concrete code smells where the full exploit path could not be completed in one analysis pass. These are not false positives — they are high-signal leads for manual review. Not scored._
 
-- **<Title>** — `Contract.function` — <1-2 sentence description of the suspected issue and why the path couldn't be completed>
-- **<Title>** — `Contract.function` — <1-2 sentence description>
+- **<Title>** — `Contract.function` — Code smells: <missing guard, unsafe arithmetic, etc.> — <1-2 sentence description of the trail and what remains unverified>
+- **<Title>** — `Contract.function` — Code smells: <...> — <1-2 sentence description>
 
 ---
 

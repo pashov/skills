@@ -1,7 +1,3 @@
-# Attack Vectors Reference (1/4)
-
-220 total attack vectors
-
 ---
 
 **1. Signature Malleability**

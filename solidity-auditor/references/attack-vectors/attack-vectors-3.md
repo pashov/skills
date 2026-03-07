@@ -1,7 +1,3 @@
-# Attack Vectors Reference (3/4)
-
-220 total attack vectors
-
 ---
 
 **111. Nested Mapping Inside Struct Not Cleared on `delete`**
