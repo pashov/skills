@@ -33,6 +33,21 @@ _Portrayed below: finding multiple high-confidence vulnerabilities in a codebase
 /solidity-auditor --file-output
 ```
 
+## Constraints (optional)
+
+Drop a `.pashov-skills-constraints.yaml` in your repo root to tell the skill what your codebase does and doesn't use. Agents will skip irrelevant attack vectors during triage, reducing noise and scan time.
+
+```yaml
+tokens: [USDC, WETH]        # skip exotic-token vectors
+standards: [ERC20]           # skip ERC721/ERC1155/ERC4626 vectors
+cross_chain: false           # skip LayerZero/bridge vectors
+proxy_pattern: none          # none | transparent | uups | diamond | beacon
+oracle: chainlink            # chainlink | twap | pyth | custom | none
+account_abstraction: false   # skip ERC-4337 vectors
+```
+
+All fields optional. Code overrides constraints.
+
 ## Known Limitations
 
 **Codebase size.** Works best up to ~2,500 lines of Solidity. Past ~5,000 lines, triage accuracy and mid-bundle recall drop noticeably. For large codebases, run per module rather than everything at once.
