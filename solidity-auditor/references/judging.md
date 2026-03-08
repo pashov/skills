@@ -19,6 +19,8 @@ Confidence measures certainty that the finding is real and exploitable — not h
 - Privileged caller required (owner, admin, multisig, governance) → **-25**.
 - Attack path is partial (general idea is sound but cannot write exact caller → call → state change → outcome) → **-20**.
 - Impact is self-contained (only affects the attacker's own funds, no spillover to other users) → **-15**.
+- Requires specific token behavior (fee-on-transfer, rebasing, ERC-777 hooks) that may not apply to whitelisted tokens → **-10**.
+- Requires external precondition (oracle failure, L2 sequencer downtime, bridge delay) → **-10**.
 
 Confidence indicator: `[score]` (e.g., `[95]`, `[75]`, `[60]`).
 
