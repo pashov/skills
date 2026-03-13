@@ -44,7 +44,7 @@ The skill is then invocable as `/solidity-auditor`. See the [skill README](solid
 AI CLI prompt:
 
 ```
-update the solidity-auditor skill to latest
+update the solidity-auditor skill to latest from https://github.com/pashov/skills/
 ```
 
 Or `cd` into the cloned `skills` repo and run:
