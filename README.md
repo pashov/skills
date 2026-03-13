@@ -11,7 +11,7 @@
 
 Works with the **Claude Code CLI**, the **VS Code Claude extension**, and **Cursor**.
 
-**AI CLI (Claude Code / Cursor chat):**
+**AI CLI (Claude Code / Codex / Cursor chat etc.):**
 
 Install the skill by pasting this prompt:
 
