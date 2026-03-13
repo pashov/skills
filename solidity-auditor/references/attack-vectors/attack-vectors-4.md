@@ -1,241 +1,275 @@
-# Attack Vectors Reference (4/4)
-
-170 total attack vectors
-
 ---
 
-**127. Missing chainId (Cross-Chain Replay)**
-
-- **D:** Signed payload omits `chainId`. Valid signature replayable on forks/other EVM chains. Or `chainId` hardcoded at deployment instead of `block.chainid`.
-- **FP:** EIP-712 domain separator includes dynamic `chainId: block.chainid` and `verifyingContract`.
-
-**128. Non-Standard ERC20 Return Values (USDT-style)**
-
-- **D:** `require(token.transfer(to, amount))` reverts on tokens returning nothing (USDT, BNB). Or return value ignored (silent failure).
-- **FP:** OZ `SafeERC20.safeTransfer()`/`safeTransferFrom()` used throughout.
-
-**129. Front-Running Zero Balance Check with Dust Transfer**
-
-- **D:** `require(token.balanceOf(address(this)) == 0)` gates a state transition. Dust transfer makes balance non-zero, DoS-ing the function at negligible cost.
-- **FP:** Threshold check (`<= DUST_THRESHOLD`) instead of `== 0`. Access-controlled function. Internal accounting ignores direct transfers.
-
-**130. Diamond Proxy Facet Selector Collision**
-
-- **D:** EIP-2535 Diamond where two facets register same 4-byte selector. Malicious facet via `diamondCut` hijacks calls to critical functions. Pattern: `diamondCut` adds facet with overlapping selectors, no on-chain collision check.
-- **FP:** `diamondCut` validates no selector collisions. `DiamondLoupeFacet` enumerates/verifies selectors post-cut. Multisig + timelock on `diamondCut`.
-
-**131. Flash Loan Governance Attack**
-
-- **D:** Voting uses `token.balanceOf(msg.sender)` or `getPastVotes(account, block.number)` (current block). Borrow tokens, vote, repay in one tx.
-- **FP:** `getPastVotes(account, block.number - 1)` used. Timelock between snapshot and vote.
-
-**132. Hardcoded Network-Specific Addresses**
-
-- **D:** Literal `address(0x...)` constants for external dependencies (oracles, routers, tokens) in deployment scripts/constructors. Wrong contracts on different chains.
-- **FP:** Per-chain config file keyed by chain ID. Script asserts `block.chainid`. Addresses passed as constructor args from environment. Deterministic cross-chain addresses (e.g., Permit2).
-
-**133. ERC4626 Round-Trip Profit Extraction**
-
-- **D:** `redeem(deposit(a)) > a` or inverse — rounding errors in both `_convertToShares` and `_convertToAssets` favor the user, yielding net profit per round-trip.
-- **FP:** Rounding per EIP-4626: deposit/mint round down (vault-favorable), withdraw/redeem round up (vault-favorable). OZ ERC4626 with `_decimalsOffset()`.
-
-**134. ERC1155 ID-Based Role Access Control With Publicly Mintable Role Tokens**
-
-- **D:** Access control via `require(balanceOf(msg.sender, ROLE_ID) > 0)` where `mint` for those IDs is not separately gated. Role tokens transferable by default.
-- **FP:** Minting role-token IDs gated behind separate access control. Role tokens non-transferable (`_beforeTokenTransfer` reverts for non-mint/burn). Dedicated non-token ACL used.
-
-**135. Off-By-One in Bounds or Range Checks**
-
-- **D:** (1) `i <= arr.length` in loop (accesses OOB index). (2) `arr[arr.length - 1]` in `unchecked` without length > 0 check. (3) `>=` vs `>` confusion in financial logic (early unlock, boundary-exceeding deposit). (4) Integer division rounding accumulation across N recipients.
-- **FP:** Loop uses `<` with fixed-length array. Last-element access preceded by length check. Financial boundaries demonstrably correct for the invariant.
-
-**136. ERC4626 Caller-Dependent Conversion Functions**
-
-- **D:** `convertToShares()`/`convertToAssets()` branches on `msg.sender`-specific state (per-user fees, whitelist, balances). EIP-4626 requires caller-independence. Downstream aggregators get wrong sizing.
-- **FP:** Implementation reads only global vault state (`totalSupply`, `totalAssets`, protocol-wide fee constants).
-
----
-
----
-
-**137. Multi-Block TWAP Oracle Manipulation**
-
-- **D:** TWAP observation window < 30 minutes. Post-Merge validators controlling consecutive blocks can hold manipulated AMM state across blocks, shifting TWAP cheaply.
-- **FP:** TWAP window >= 30 min. Chainlink/Pyth as price source. Max-deviation circuit breaker against secondary source.
-
-**138. Merkle Proof Reuse — Leaf Not Bound to Caller**
-
-- **D:** Merkle leaf doesn't include `msg.sender`: `MerkleProof.verify(proof, root, keccak256(abi.encodePacked(amount)))`. Proof can be front-run from different address.
-- **FP:** Leaf encodes `msg.sender`: `keccak256(abi.encodePacked(msg.sender, amount))`. Proof recorded as consumed after first use.
-
-**139. Uninitialized Implementation Takeover**
-
-- **D:** Implementation behind proxy has `initialize()` but constructor lacks `_disableInitializers()`. Attacker calls `initialize()` on implementation directly, becomes owner, can upgrade to malicious contract. Ref: Wormhole (2022), Parity (2017).
-- **FP:** Constructor contains `_disableInitializers()`. OZ `Initializable` correctly gates the function. Not behind a proxy (standalone).
-
-**140. Missing chainId / Message Uniqueness in Bridge**
-
-- **D:** Bridge processes messages without `processedMessages[hash]` replay check, `destinationChainId == block.chainid` validation, or source chain ID in hash. Message replayable cross-chain or on same chain.
-- **FP:** Unique nonce per sender. Hash of `(sourceChain, destChain, nonce, payload)` stored and checked. Contract address in hash.
-
-**141. Missing Oracle Price Bounds (Flash Crash / Extreme Value)**
-
-- **D:** Oracle returns a technically valid but extreme price (e.g., ETH at $0.01 during a flash crash). No min/max sanity bound or deviation check against historical/secondary price. Protocol executes liquidations or swaps at wildly incorrect prices.
-- **FP:** Circuit breaker: `require(price >= MIN_PRICE && price <= MAX_PRICE)`. Deviation check against secondary oracle source. Heartbeat + price-change-rate limiting.
-
-**142. DVN Collusion or Insufficient DVN Diversity**
-
-- **D:** OApp configured with a single DVN (`1/1/1` security stack) or multiple DVNs controlled by the same entity / using the same underlying verification method. Compromising one entity approves fraudulent cross-chain messages. Pattern: `setConfig` with `requiredDVNCount = 1` and no optional DVNs.
-- **FP:** Diverse DVN set (e.g., Google Cloud DVN + Axelar Adapter + protocol's own DVN) with `2/3+` threshold. DVNs use independent verification methods (light client, oracle, ZKP). Protocol runs its own required DVN.
-
-**143. Missing Cross-Chain Rate Limits / Circuit Breakers**
-
-- **D:** Bridge or OFT contract has no per-transaction or time-window transfer caps. A single exploit transaction can drain the entire locked asset pool before detection. No pause mechanism to halt operations during an active exploit.
-- **FP:** Per-tx and per-window rate limits configured (e.g., Chainlink CCIP per-lane limits). `whenNotPaused` modifier on send/receive. Anomaly detection with automated pause. Guardian/emergency multisig can freeze operations. Ref: Ronin hack went 6 days undetected — rate limits would have capped losses.
-
-**144. Staking Reward Front-Run by New Depositor**
-
-- **D:** Reward checkpoint (`rewardPerTokenStored`) updated AFTER new stake recorded: `_balances[user] += amount` before `updateReward()`. New staker earns rewards for unstaked period.
-- **FP:** `updateReward(account)` executes before any balance update. `rewardPerTokenPaid[user]` tracks per-user checkpoint.
-
-**145. L2 Sequencer Uptime Not Checked**
-
-- **D:** Contract on L2 (Arbitrum/Optimism/Base) uses Chainlink feeds without querying L2 Sequencer Uptime Feed. Stale data during downtime triggers wrong liquidations.
-- **FP:** Sequencer uptime feed queried (`answer == 0` = up), with grace period after restart.
-
-**146. Insufficient Gas Forwarding / 63/64 Rule**
-
-- **D:** External call without minimum gas budget: `target.call(data)` with no gas check. 63/64 rule leaves subcall with insufficient gas. In relayer patterns, subcall silently fails but outer tx marks request as "processed."
-- **FP:** `require(gasleft() >= minGas)` before subcall. Return value + returndata both checked. EIP-2771 with verified gas parameter.
-
----
-
----
-
-**147. Accrued Interest Omitted from Health Factor or LTV Calculation**
-
-- **D:** Health factor or LTV computed from principal debt without adding accrued interest: `health = collateral / principal` instead of `collateral / (principal + accruedInterest)`. Understates actual debt, delays necessary liquidations.
-- **FP:** `getDebt()` includes accrued interest. Interest accrual function called before health check. Interest compounded on every state-changing interaction.
-
-**148. ERC1155 setApprovalForAll Grants All-Token-All-ID Access**
-
-- **D:** Protocol requires `setApprovalForAll(protocol, true)` for deposits/staking. No per-ID or per-amount granularity -- operator can transfer any ID at full balance.
-- **FP:** Protocol uses direct `safeTransferFrom` with user as `msg.sender`. Operator is immutable contract with escrow-only transfer logic.
-
-**149. Storage Layout Collision Between Proxy and Implementation**
-
-- **D:** Proxy declares state variables at sequential slots (not EIP-1967). Implementation also starts at slot 0. Proxy's admin overlaps implementation's `initialized` flag. Ref: Audius (2022).
-- **FP:** EIP-1967 slots. OZ Transparent/UUPS pattern. No state variables in proxy contract.
-
-**150. validateUserOp Missing EntryPoint Caller Restriction**
-
-- **D:** `validateUserOp` is `public`/`external` without `require(msg.sender == entryPoint)`. Also check `execute`/`executeBatch` for same restriction.
-- **FP:** `require(msg.sender == address(_entryPoint))` or `onlyEntryPoint` modifier present. Internal visibility used.
-
-**151. Diamond Shared-Storage Cross-Facet Corruption**
-
-- **D:** EIP-2535 Diamond facets declare top-level state variables (plain `uint256 foo`) instead of namespaced storage structs. Multiple facets independently start at slot 0, corrupting each other.
-- **FP:** All facets use single `DiamondStorage` struct at namespaced position (EIP-7201). No top-level state variables. OZ `@custom:storage-location` pattern.
-
-**152. Stale Cached ERC20 Balance from Direct Token Transfers**
-
-- **D:** Contract tracks holdings in state variable (`totalDeposited`, `_reserves`) updated only through protocol functions. Direct `token.transfer(contract)` inflates real balance beyond cached value. Attacker exploits gap for share pricing/collateral manipulation.
-- **FP:** Accounting reads `balanceOf(this)` live. Cached value reconciled at start of every state-changing function. Direct transfers treated as revenue.
-
-**153. Cross-Function Reentrancy**
-
-- **D:** Two functions share state variable. Function A makes external call before updating shared state; Function B reads that state. `nonReentrant` on A but not B.
-- **FP:** Both functions share same contract-level mutex. Shared state updated before any external call.
-
-**154. Slippage Enforced at Intermediate Step, Not Final Output**
-
-- **D:** Multi-hop swap checks `minAmountOut` on the first hop or an intermediate step, but the amount actually received by the user at the end of the pipeline has no independent slippage bound. Second/third hops can be sandwiched freely.
-- **FP:** `minAmountOut` validated against the user's final received balance (delta check). Single-hop swap. User specifies per-hop minimums.
-
-**155. Non-Atomic Proxy Deployment Enabling CPIMP Takeover**
-
-- **D:** Same non-atomic deploy+init pattern as V76, but attacker inserts malicious middleman implementation (CPIMP) that persists across upgrades by restoring itself in ERC-1967 slot.
-- **FP:** Atomic init calldata in constructor. `_disableInitializers()` in implementation constructor.
-
-**156. Cross-Chain Reentrancy via Safe Transfer Callbacks**
-
-- **D:** Cross-chain receive function (`lzReceive`, `_credit`) calls `_safeMint` or `_safeTransfer` before updating supply/ownership counters. The `onERC721Received` / `onERC1155Received` callback re-enters to initiate another cross-chain send before state is finalized, creating duplicate tokens or double-spending.
-- **FP:** State updates (counters, balances) committed before any safe transfer. `nonReentrant` on receive path. `_mint` used instead of `_safeMint` (no callback). Ref: Ackee Blockchain cross-chain reentrancy PoC.
-
----
-
----
-
-**157. abi.encodePacked Hash Collision with Dynamic Types**
-
-- **D:** `keccak256(abi.encodePacked(a, b))` where two+ args are dynamic types (`string`, `bytes`, dynamic arrays). No length prefix means different inputs produce identical hashes. Affects permits, access control keys, nullifiers.
-- **FP:** `abi.encode()` used instead. Only one dynamic type arg. All args fixed-size.
-
-**158. Signed Integer Mishandling (signextend / sar / slt Confusion)**
-
-- **D:** Assembly performs arithmetic on signed integers but uses unsigned opcodes. `shr` instead of `sar` (arithmetic shift right) loses the sign bit. `lt`/`gt` instead of `slt`/`sgt` treats negative numbers as huge positives. Missing `signextend` when loading a signed value smaller than 256 bits from calldata or storage.
-- **FP:** Code consistently uses `sar`/`slt`/`sgt` for signed operations and `shr`/`lt`/`gt` for unsigned. `signextend(byteWidth - 1, val)` applied after loading sub-256-bit signed values. Code only operates on unsigned integers.
-
-**159. Missing `_debit` / `_debitFrom` Authorization in OFT**
-
-- **D:** Custom OFT override of `_debit` or `_debitFrom` omits `require(msg.sender == _from || allowance[_from][msg.sender] >= amount)`. Anyone can bridge tokens from any holder's balance. Pattern: `_debit` that calls `_burn(_from, amount)` without verifying caller is authorized.
-- **FP:** Standard LayerZero OFT implementation used without override. Custom `_debit` includes proper authorization. `_debit` only callable via `send()` which uses `msg.sender` as `_from`.
-
-**160. Default Message Library Hijack (Configuration Drag-Along)**
-
-- **D:** OApp does not explicitly pin its send/receive library version via `setSendVersion()` / `setReceiveVersion()` (or V2 `setSendLibrary()` / `setReceiveLibrary()`). It relies on the endpoint's mutable default. A malicious or compromised default library update silently applies to all unpinned OApps, bypassing DVN/Oracle validation.
-- **FP:** OApp explicitly sets library versions in constructor or initialization. Configuration is immutable or governance-controlled with timelock. LayerZero V2 EndpointV2 is non-upgradeable (but library defaults are still mutable).
-
-**161. ERC-1271 isValidSignature Delegated to Untrusted Module**
-
-- **D:** `isValidSignature(hash, sig)` delegated to externally-supplied contract without whitelist check. Malicious module always returns `0x1626ba7e`, passing all signature checks.
-- **FP:** Delegation only to owner-controlled whitelist. Module registry has timelock/guardian approval.
-
-**162. Proxy Storage Slot Collision**
-
-- **D:** Proxy stores `implementation`/`admin` at sequential slots (0, 1); implementation also declares variables from slot 0. Implementation writes overwrite proxy pointers.
-- **FP:** EIP-1967 randomized slots used. OZ Transparent/UUPS pattern.
-
-**163. Counterfactual Wallet Initialization Parameters Not Bound to Deployed Address**
-
-- **D:** Factory `createAccount` uses CREATE2 but salt doesn't incorporate all init params (especially owner). Attacker calls `createAccount` with different owner, deploying wallet they control to same counterfactual address.
-- **FP:** Salt derived from all init params: `salt = keccak256(abi.encodePacked(owner, ...))`. Factory reverts if account exists. Initializer called atomically with deployment.
-
-**164. Oracle Price Update Front-Running**
-
-- **D:** On-chain oracle update tx visible in mempool. Attacker front-runs a favorable price update by opening a position at the stale price, then profits when the update lands. Pattern: Pyth/Chainlink push-model where update tx is submitted to public mempool.
-- **FP:** Protocol uses pull-based oracle (user submits price update atomically with their action). Private mempool (Flashbots Protect) for oracle updates. Price-update-and-action in single tx.
-
-**165. Metamorphic Contract via CREATE2 + SELFDESTRUCT**
-
-- **D:** `CREATE2` deployment where deployer can `selfdestruct` and redeploy different bytecode at same address. Governance-approved code swapped before execution. Ref: Tornado Cash Governance (2023). Post-Dencun (EIP-6780): largely mitigated except same-tx create-destroy-recreate.
-- **FP:** Post-Dencun: `selfdestruct` no longer destroys code unless same tx as creation. `EXTCODEHASH` verified at execution time. Not deployed via `CREATE2` from mutable deployer.
-
-**166. Free Memory Pointer Corruption**
-
-- **D:** Assembly block writes to memory at fixed offsets (e.g., `mstore(0x80, val)`) without reading or updating the free memory pointer at `0x40`. Subsequent Solidity code allocates memory from stale pointer, overwriting the assembly-written data — or vice versa. Second pattern: assembly sets `mstore(0x40, newPtr)` to an incorrect value, causing later Solidity allocations to overlap prior data.
-- **FP:** Assembly block reads `mload(0x40)`, writes only above that offset, then updates `mstore(0x40, newFreePtr)`. Or block only uses scratch space (`0x00`–`0x3f`). Block annotated `memory-safe` and verified to comply. Ref: Solidity optimizer bug in 0.8.13–0.8.14 mishandled cross-block memory writes.
-
----
-
----
-
-**167. ERC4626 Inflation Attack (First Depositor)**
-
-- **D:** `shares = assets * totalSupply / totalAssets`. When `totalSupply == 0`, deposit 1 wei + donate inflates share price, victim's deposit rounds to 0 shares. No virtual offset.
-- **FP:** OZ ERC4626 with `_decimalsOffset()`. Dead shares minted to `address(0)` at init.
-
-**168. Storage Layout Shift on Upgrade**
-
-- **D:** V2 inserts new state variable in middle of contract instead of appending. Subsequent variables shift slots, corrupting state. Also: changing variable type between versions shifts slot boundaries.
-- **FP:** New variables only appended. OZ storage layout validation in CI. Variable types unchanged between versions.
-
-**169. Hardcoded Calldataload Offset Bypass via Non-Canonical ABI Encoding**
-
-- **D:** Assembly reads a field at hardcoded calldata offset (`calldataload(164)`) assuming standard ABI layout. Attacker crafts non-canonical encoding — manipulated dynamic-type offset pointers or padding — so a different value sits at the expected position.
-- **FP:** Field decoded via `abi.decode()` (compiler bounds-checked). No hardcoded `calldataload` offsets — parameters extracted through Solidity's typed calldata accessors. `calldatasize() >= expected` validated before reading.
-
-**170. Calldata Input Malleability**
+**166. Calldata Input Malleability**
 
 - **D:** Contract hashes raw calldata for uniqueness (`processedHashes[keccak256(msg.data)]`). Dynamic-type ABI encoding uses offset pointers — multiple distinct calldata layouts decode to identical values. Attacker bypasses dedup with semantically equivalent but bytewise-different calldata.
 - **FP:** Uniqueness check hashes decoded parameters: `keccak256(abi.encode(decodedParams))`. Nonce-based replay protection. Only fixed-size types in signature (no encoding ambiguity).
+
+**167. Reward Accrual During Zero-Depositor Period**
+
+- **D:** Time-based reward distribution starts at vault deployment but no depositors exist yet. First depositor claims all rewards accumulated during the empty period regardless of deposit size or timing.
+- **FP:** Rewards only accrue when `totalSupply > 0`. Reward start time set on first deposit. Unclaimed pre-deposit rewards sent to treasury or burned.
+
+**168. MEV Withdrawal Before Bad Debt Socialization**
+
+- **D:** External event (liquidation, exploit, depeg) causes vault loss. MEV actor observes pending loss-causing tx in mempool and front-runs a withdrawal at pre-loss share price, leaving remaining depositors to absorb the full loss.
+- **FP:** Withdrawals require time-delayed request queue (epoch-based or cooldown). Loss realization and share price update are atomic. Private mempool used for liquidation txs.
+
+**169. Vault Insolvency via Accumulated Rounding Dust**
+
+- **D:** Vault tracks `totalAssets` as a storage variable separate from `token.balanceOf(vault)`. Solidity's floor rounding on each deposit/withdrawal creates tiny overages — user receives 1 wei more than burned shares represent. Over many operations `totalAssets` exceeds actual balance, causing last withdrawers to revert.
+- **FP:** Rounding consistently favors the vault (round shares up on deposit, round assets down on withdrawal). OZ Math with `Rounding.Ceil`/`Rounding.Floor` applied correctly.
+
+**170. FIFO Withdrawal Ordering Degrades Yield**
+
+- **D:** Aggregator vault withdraws from sub-vaults in fixed FIFO order, depleting highest-APY vaults first. Remaining capital concentrates in lowest-yield positions, reducing overall returns for all depositors.
+- **FP:** Withdrawal ordering sorted by APY ascending (lowest-yield first). Dynamic rebalancing after withdrawals. Single underlying vault (no ordering issue).
+
+**171. ERC4626 convertToAssets Used Instead of previewWithdraw**
+
+- **D:** Integration calls `convertToAssets(shares)` to estimate withdrawal proceeds. Per ERC4626 spec this excludes fees and slippage — actual redeemable amount is lower. Downstream logic (health checks, rebalancing, UI) operates on inflated values.
+- **FP:** `previewWithdraw()` or `previewRedeem()` used for actual withdrawal estimates. Vault charges no withdrawal fees. Fee delta accounted separately.
+
+**172. Unclaimed Reward Tokens from Underlying Protocol**
+
+- **D:** Vault deposits into yield protocol (Morpho, Aave, Convex) that emits reward tokens. Vault never calls `claim()` or lacks logic to distribute claimed rewards to depositors. Rewards accumulate indefinitely in the vault or underlying protocol, inaccessible to shareholders.
+- **FP:** Explicit `claimRewards()` function harvests and distributes. Reward tokens tracked dynamically (mapping, not hardcoded list). Vault sweeps unexpected token balances to treasury.
+
+**173. Idle Asset Dilution from Sub-Vault Deposit Caps**
+
+- **D:** Parent/aggregator vault accepts deposits without checking sub-vault capacity. When sub-vaults hit their deposit caps, excess assets sit idle in the parent — earning zero yield but diluting share price for all depositors.
+- **FP:** `maxDeposit()` reflects combined sub-vault remaining capacity. Deposits revert when no productive capacity remains. Idle assets auto-routed to fallback yield source.
+
+**174. Memory Struct Copy Not Written Back to Storage**
+
+- **D:** `MyStruct memory s = myMapping[key]` creates a memory copy. Modifications to `s` do not persist — storage remains unchanged. Common in reward updates, position tracking, and config changes where the developer assumes memory aliases storage.
+- **FP:** Uses `storage` keyword: `MyStruct storage s = myMapping[key]`. Explicitly writes back: `myMapping[key] = s` after modification.
+
+**175. On-Chain Slippage Computed from Manipulated Pool**
+
+- **D:** `amountOutMin` calculated on-chain by querying the same pool that will execute the swap. Attacker manipulates the pool before the tx, making both the quote and the swap reflect the manipulated state — slippage check passes despite sandwich.
+- **FP:** `amountOutMin` supplied by the caller (off-chain quote). Uses a separate oracle for the floor price. TWAP-based minimum.
+
+**176. Withdrawal Queue Bricked by Zero-Amount Entry**
+
+- **D:** FIFO withdrawal queue processes entries sequentially. A cancelled or zeroed-out entry causes the loop to `break` or revert on zero amount instead of skipping it, permanently blocking all subsequent withdrawals behind it.
+- **FP:** Queue skips zero-amount entries. Cancellation removes the entry or marks it processed. Queue uses linked list allowing removal.
+
+**177. Lazy Epoch Advancement Skips Reward Periods**
+
+- **D:** Epoch counter advances only on user interaction. If no one interacts during an epoch, it is never advanced — rewards for that period are miscalculated, lost, or retroactively applied to the wrong epoch when the next interaction occurs.
+- **FP:** Keeper or automation advances epochs independently. Epoch catch-up loop processes all skipped epochs on next interaction. Continuous (non-epoch) reward accrual.
+
+**178. Reward Rate Changed Without Settling Accumulator**
+
+- **D:** Admin updates the emission rate but `updateReward()` / `updatePool()` is not called first. The new rate is retroactively applied to the entire elapsed period since the last update, overpaying or underpaying rewards for that window.
+- **FP:** Rate-change function calls `updateReward()` before applying the new rate. Modifier auto-settles on every state change.
+
+**179. Liquidated Position Continues Accruing Rewards**
+
+- **D:** Position is liquidated (balance zeroed, collateral seized) but is not removed from the reward distribution system. `rewardDebt` and accumulated rewards are not reset — the liquidated user earns phantom rewards, or the rewards are locked permanently.
+- **FP:** Liquidation calls `_withdrawRewards()` or equivalent before zeroing the position. Reward system checks `balance > 0` before accruing.
+
+**180. Cached Reward Debt Not Reset After Claim**
+
+- **D:** After `claimRewards()`, the cached reward amount (`pendingReward` or `rewardDebt`) is not zeroed. On the next claim cycle, the full cached amount is paid again — double (or repeated) payout.
+- **FP:** `pendingReward[user] = 0` after transfer. `rewardDebt` recalculated from current balance and accumulator after claim.
+
+**181. Emission Distribution Before Period Update**
+
+- **D:** `distribute()` reads the contract's token balance before `updatePeriod()` mints or transfers new emissions. New rewards arrive after distribution already executed — they sit idle until the next cycle, underpaying the current period.
+- **FP:** `updatePeriod()` called before `distribute()` in the same tx. Emissions pre-funded before distribution window opens.
+
+**182. Pause Modifier Blocks Liquidations**
+
+- **D:** `whenNotPaused` applied broadly to all external functions including `liquidate()`. During a pause, interest accrues and prices move but positions cannot be liquidated — bad debt accumulates unchecked until unpause.
+- **FP:** Liquidation functions exempt from pause. Separate `pauseLiquidations` flag with independent governance. Interest accrual also paused.
+
+**183. Liquidation Arithmetic Reverts at Extreme Price Drops**
+
+- **D:** When collateral price drops 95%+, liquidation math overflows or underflows — e.g., `collateralNeeded = debt / price` becomes enormous, exceeding available collateral. The liquidation function reverts, making the position unliquidatable and locking bad debt.
+- **FP:** Liquidation caps `collateralSeized` at position's total collateral. Graceful handling of underwater positions (full seizure, remaining bad debt socialized).
+
+**184. Borrower Front-Runs Liquidation**
+
+- **D:** Borrower observes pending `liquidate()` tx in mempool, front-runs with minimal repayment or collateral top-up to push health factor above threshold. Immediately re-borrows after liquidation tx fails. Repeated indefinitely to maintain risky position.
+- **FP:** Liquidation uses flash-loan-resistant health check (same-block deposit doesn't count). Minimum repayment cooldown. Dutch auction liquidation (no fixed threshold to game).
+
+**185. Liquidation Discount Applied Inconsistently Across Code Paths**
+
+- **D:** One code path calculates debt at face value, another applies a liquidation discount. When the discounted amount is subtracted from the non-discounted amount, the result underflows or leaves residual bad debt unaccounted.
+- **FP:** Discount applied consistently in all paths touching liquidation accounting. Single source of truth for discounted value.
+
+**186. No Buffer Between Max LTV and Liquidation Threshold**
+
+- **D:** Max borrowable LTV equals the liquidation threshold. A borrower at max LTV is immediately liquidatable on any adverse price tick. Combined with origination fees, positions can be born underwater.
+- **FP:** Max LTV is meaningfully lower than liquidation threshold (e.g., 80% vs 85%). Origination fee deducted from borrowed amount, not added to debt.
+
+**187. Same-Block Vote-Transfer-Vote**
+
+- **D:** Governance reads voting power at current block, not a past snapshot. User votes, transfers tokens to a second wallet in the same block, and votes again — doubling their effective vote weight.
+- **FP:** `getPastVotes(block.number - 1)` or proposal-creation snapshot. Voting power locked on first vote until proposal closes. ERC20Votes with checkpoint-based historical balances.
+
+**188. Quorum Computed from Live Supply, Not Snapshot**
+
+- **D:** `quorum = totalSupply() * quorumBps / 10000` reads current supply. After a proposal is created, an attacker mints tokens (or deposits to inflate supply), lowering the effective quorum percentage needed to pass.
+- **FP:** Quorum snapshotted at proposal creation: `totalSupply(proposalSnapshot)`. Fixed absolute quorum amount. Supply changes do not affect active proposals.
+
+**189. Checkpoint Overwrite on Same-Block Operations**
+
+- **D:** Multiple delegate/transfer operations in the same block call `_writeCheckpoint()` with the same `block.number` key. Each overwrites the previous — binary search returns the first (incomplete) checkpoint, losing intermediate state.
+- **FP:** Checkpoint appends only when `block.number > lastCheckpoint.blockNumber`. Same-block operations accumulate into the existing checkpoint. Off-chain indexer used instead of on-chain lookups.
+
+**190. Self-Delegation Doubles Voting Power**
+
+- **D:** Delegating to self adds votes to the delegate (self) but does not subtract the undelegated balance. Voting power is counted twice — once as held tokens, once as delegated votes.
+- **FP:** Delegation logic subtracts from holder's direct balance when adding to delegate. Self-delegation is a no-op or explicitly handled. OZ Votes implementation used correctly.
+
+**191. Nonce Not Incremented on Reverted Execution**
+
+- **D:** Meta-transaction or permit nonce is checked before execution but only incremented on success. If the inner call reverts (after nonce check, before increment), the same signed message can be replayed until it eventually succeeds.
+- **FP:** Nonce incremented before execution (check-effects-interaction). Nonce incremented in both success and failure paths. Deadline-based expiry on signed messages.
+
+**192. Bridge Global Rate Limit Griefing**
+
+- **D:** Bridge enforces a global throughput cap (total value per window) not segmented by user. Attacker fills the rate limit by bridging cheap tokens back and forth, blocking all legitimate users from bridging during the cooldown window.
+- **FP:** Per-user rate limits. Rate limit segmented by token or route. Whitelist for high-value transfers. No global rate limit.
+
+**193. Self-Matched Orders Enable Wash Trading**
+
+- **D:** Order matching does not verify `maker != taker`. A user submits both sides of a trade to farm trading rewards, inflate volume metrics, bypass royalties (NFT), or extract fee rebates.
+- **FP:** `require(makerOrder.signer != takerOrder.signer)`. Volume-based rewards use time-weighted averages resistant to single-block spikes. Royalty enforced regardless of counterparty.
+
+**194. Dutch Auction Price Decay Underflow**
+
+- **D:** `currentPrice = startPrice - (decayRate * elapsed)`. When the auction runs past the point where price should reach zero, the subtraction underflows — reverting on 0.8+ or wrapping to `type(uint256).max` on <0.8. Auction becomes unfinishable.
+- **FP:** `currentPrice = elapsed >= duration ? reservePrice : startPrice - (decayRate * elapsed)`. Floor price enforced. `min()` used to cap decay.
+
+**195. Timelock Anchored to Deployment, Not Action**
+
+- **D:** Recovery or admin timelock measured from contract deployment or initialization, not from when the action was queued. Once the initial delay elapses, all future actions can execute instantly — the timelock is effectively permanent bypass.
+- **FP:** Timelock resets on each queued action. `executeAfter = block.timestamp + delay` set at queue time. OZ TimelockController pattern.
+
+**196. Withdrawal Rate Limit Bypassed via Share Transfer**
+
+- **D:** Per-address withdrawal limit: `require(withdrawn[msg.sender] + amount <= limitPerPeriod)`. User transfers vault shares to a fresh address and withdraws from there — each new address gets a fresh limit.
+- **FP:** Limit tracks the underlying position, not the address. Shares are non-transferable or transfer resets withdrawal allowance. KYC-bound withdrawal limits.
+
+**197. Blacklist and Whitelist Not Mutually Exclusive**
+
+- **D:** An address can hold both `BLACKLISTED` and `WHITELISTED` roles simultaneously. Whitelist-gated paths do not check the blacklist — a blacklisted address bypasses restrictions by also being whitelisted.
+- **FP:** Adding to blacklist auto-removes from whitelist (and vice versa). Single enum role per address. Both checks applied on every restricted path.
+
+**198. Dead Code After Return Statement**
+
+- **D:** Critical state update or validation (`require(success)`, `emit Event`, `nonce++`) placed after a `return` statement. The code is unreachable — failures go undetected, events are never emitted, state is never updated.
+- **FP:** All critical logic precedes `return`. Compiler warnings for unreachable code are addressed. Linter enforces no-unreachable-code rule.
+
+**199. Partial Redemption Fails to Reduce Tracked Total**
+
+- **D:** Withdrawal queue partially fills a redemption request but does not proportionally reduce `totalQueuedShares` or `totalPendingAssets`. The vault's tracked total remains inflated, skewing share price for all other depositors.
+- **FP:** Partial fill reduces tracked totals proportionally. Queue uses per-request tracking, not a global aggregate. Atomic full-or-nothing redemptions.
+
+**200. TWAP Accumulator Not Updated During Sync or Skim**
+
+- **D:** Pool's `sync()` or `skim()` function updates reserves but does not call `_update()` to advance the TWAP cumulative price accumulator. TWAP observations return stale values, enabling price manipulation through sync-then-trade sequences.
+- **FP:** `sync()` calls `_update()` before overwriting reserves. TWAP sourced from external oracle, not internal accumulator. Uniswap V3 `observe()` used (accumulator updated on every swap).
+
+**201. Expired Oracle Version Silently Assigned Previous Price**
+
+- **D:** In request-commit oracle patterns (Pyth, custom keepers), an expired or unfulfilled price request is assigned the last valid price instead of reverting or returning invalid. Pending orders execute at stale prices rather than being cancelled.
+- **FP:** Expired versions return `price = 0` or `valid = false`, forcing order cancellation. Staleness threshold enforced per-request. Fallback oracle used for expired primaries.
+
+**202. Funding Rate Derived from Single Trade Price**
+
+- **D:** Perpetual swap funding rate uses the last trade price as the mark price. A single self-trade at an extreme price skews the funding rate — the attacker profits from funding payments on their opposing position.
+- **FP:** Mark price derived from TWAP or external oracle index. Funding rate capped per period. Volume-weighted average price used.
+
+**203. Open Interest Tracked with Pre-Fee Position Size**
+
+- **D:** Open interest incremented by the full position size before fees are deducted. Actual exposure is smaller than recorded OI. Aggregate OI is permanently inflated, eventually hitting caps and blocking new positions.
+- **FP:** OI incremented by post-fee position size. OI decremented on close by same amount used at open. Periodic OI reconciliation.
+
+**204. Interest Accrual Rounds to Zero but Timestamp Advances**
+
+- **D:** `interest = rate * timeDelta / SECONDS_PER_YEAR` rounds to zero when `timeDelta` is small (e.g., <207s at 15% APR). But `lastAccrualTime = block.timestamp` is still updated — the fractional interest is permanently lost, not deferred to the next accrual.
+- **FP:** Accumulator uses sufficient precision (e.g., RAY = 1e27) to avoid zero rounding at per-block intervals. `lastAccrualTime` only advances when computed interest > 0.
+
+**205. Permissionless accrueInterest Griefing**
+
+- **D:** `accrueInterest()` is permissionless and updates `lastAccrualTime` on every call. Attacker calls it at very short intervals — each call computes zero interest (rounding) but advances the timestamp, systematically suppressing interest accumulation to near-zero.
+- **FP:** Minimum accrual interval enforced: `require(block.timestamp - lastAccrualTime >= MIN_INTERVAL)`. Precision high enough that per-block interest > 0. Access-restricted accrual.
+
+**206. notifyRewardAmount Overwrites Active Reward Period**
+
+- **D:** Calling `notifyRewardAmount(newAmount)` replaces the current reward period. Remaining undistributed rewards from the old period are silently lost — not carried forward. Admin or attacker can erase pending rewards by notifying a smaller amount.
+- **FP:** New notification adds to remaining: `rewardRate = (newAmount + remaining) / duration`. Only callable by designated distributor with timelock. Remaining rewards refunded before reset.
+
+**207. Governance Proposal Executable Before Voting Period Ends**
+
+- **D:** `execute()` checks quorum and majority but not `block.timestamp >= proposal.endTime`. Once quorum is met, the proposal can be executed immediately — cutting the voting window short, preventing opposing votes from being cast.
+- **FP:** `require(block.timestamp >= proposal.endTime)` in execute. OZ Governor enforces `ProposalState.Succeeded` which requires voting period to have ended.
+
+**208. Partial Liquidation Leaves Position in Worse State**
+
+- **D:** Partial liquidation seizes some collateral but does not enforce a minimum post-liquidation health factor. Liquidator cherry-picks the most valuable collateral, leaving the position with worse health than before — approaching full insolvency without triggering full liquidation.
+- **FP:** Post-liquidation health factor check: `require(healthFactor(position) >= MIN_HF)`. Full liquidation triggered below a floor threshold. Liquidator must bring position to target health factor.
+
+**209. Delegation to address(0) Blocks Token Transfers**
+
+- **D:** Delegating votes to `address(0)` causes `_beforeTokenTransfer` or `_update` hooks to revert when attempting to modify the zero-address delegate's checkpoint. All subsequent transfers and burns for that token holder permanently revert.
+- **FP:** Delegation to `address(0)` treated as undelegation (no-op or clears delegation). Hook skips checkpoint update when delegate is `address(0)`. OZ Votes implementation handles this case.
+
+**210. ERC4626 maxDeposit Returns Non-Zero When Paused**
+
+- **D:** `maxDeposit()` returns `type(uint256).max` even when the vault is paused. Integrating protocols (aggregators, routers) read this as "deposits accepted," attempt a deposit, and revert. Per ERC4626, `maxDeposit` must return 0 when deposits would revert.
+- **FP:** `maxDeposit()` returns 0 when paused. OZ ERC4626 with pausing override. Integrators use `try deposit()` with fallback.
+
+**211. Deprecated Gauge Blocks Claiming Accrued Rewards**
+
+- **D:** Killing or deprecating a gauge clears future distributions but also blocks the `claimReward()` path for already-accrued, unclaimed rewards. Users who earned rewards before deprecation cannot retrieve them.
+- **FP:** Kill only stops future accrual — claim function remains active for pre-kill balances. Rewards swept to fallback address on deprecation. Emergency claim path bypasses active-gauge check.
+
+**212. Liquidation Blocked by External Pool Illiquidity**
+
+- **D:** Liquidation function swaps collateral for debt token via an external DEX. If the DEX pool is drained or lacks liquidity, the swap reverts, making liquidation impossible. Bad debt accumulates while the pool remains illiquid.
+- **FP:** Liquidation accepts collateral directly without swap. Fallback liquidation path uses a different DEX or oracle price. Liquidator provides debt token and receives collateral.
+
+**213. No-Bid Auction Fails to Clear State**
+
+- **D:** Auction expires without any bids. The finalization function does not clear lien, auction, or escrow data — collateral remains locked in the auction contract with no path to return it to the owner or trigger a new auction.
+- **FP:** No-bid finalization returns collateral to owner and clears all associated state. Re-auction mechanism triggered automatically. Timeout-based collateral release.
+
+**214. Position Reduction Triggers Liquidation**
+
+- **D:** User attempts to improve health by partially repaying debt or withdrawing a small amount of excess collateral. The intermediate state (after collateral removal, before debt reduction) crosses the liquidation threshold — a bot liquidates the position mid-transaction or in the same block.
+- **FP:** Repay and collateral changes are atomic (single function). Health check applied only to final state, not intermediate. Liquidation grace period after position modification.
+
+**215. Repeated Liquidation of Same Position**
+
+- **D:** Liquidation function does not flag the position as liquidated. After partial liquidation, the position still appears undercollateralized — a second liquidator (or the same one) liquidates again, seizing collateral beyond what was intended.
+- **FP:** Position marked as `liquidated` or deleted after processing. Liquidation requires `status != Liquidated`. Post-liquidation health check prevents re-triggering.
+
+**216. Loan State Transition Before Interest Settlement**
+
+- **D:** Repaying principal sets the loan state to `Repaid` before accrued interest is settled. Once in `Repaid` state, the interest accrual function skips the loan — all accumulated interest becomes permanently uncollectable.
+- **FP:** `settleInterest()` called before state transition. Interest added to repayment amount: `require(msg.value >= principal + accruedInterest)`. State transition only after full settlement.
+
+**217. Protocol Fee Inflates Reward Accumulator**
+
+- **D:** Protocol fee routed to treasury is processed through the same `rewardPerToken` accumulator as staker rewards. The accumulator increments as if all distributed tokens go to stakers, but part went to treasury — stakers' `earned()` returns more than the contract holds.
+- **FP:** Fee deducted before updating accumulator: `rewardPerToken += (reward - fee) / totalStaked`. Separate accounting for fees and rewards. Fee transferred directly, not through reward distribution.
+
+**218. Profit Tracking Underflow Blocks Withdrawals**
+
+- **D:** Vault tracks cumulative strategy profit. When a strategy reports a loss exceeding its recorded profit, `totalProfit -= loss` underflows (reverts on 0.8+). All withdrawal functions that read `totalProfit` are permanently bricked.
+- **FP:** Loss capped: `totalProfit -= min(loss, totalProfit)`. Signed integer used for profit/loss tracking. Per-strategy profit tracking (one strategy's loss doesn't affect others).
+
+**219. Share Redemption at Optimistic Rate**
+
+- **D:** Shares redeemed at a projected end-of-term exchange rate rather than the current realized rate. Early redeemers receive more than their proportional share of actual assets — late redeemers find the vault depleted.
+
+**220. DoS via Reverting External Call in Loop**
+
+- **D:** Withdrawal, burn, or claim function loops over a dynamic list and makes an external call per iteration (token transfer, swap, oracle read, callback). If any single call reverts — token paused/blacklisted, pool illiquid, recipient rejects — the entire function reverts, blocking all users from the operation even for the unaffected entries. Pattern: `for (i < list.length) { externalCall(list[i]); }` in a withdrawal/burn/claim path with no alternative exit.
+- **FP:** Each external call wrapped in `try/catch` (skip on failure). Separate per-item withdrawal function exists. Admin can remove problematic entries from the list and users can still access remaining assets.

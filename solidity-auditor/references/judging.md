@@ -4,11 +4,11 @@ Each finding passes a false-positive gate, then gets a confidence score (how cer
 
 ## FP Gate
 
-Every finding must pass all three checks. If any check fails, drop the finding — do not score or report it.
+Every finding must pass all three checks. If check 2 or 3 fails, drop the finding. If only check 1 fails but concrete code smells are present (missing guards, unsafe arithmetic, unvalidated input), move the finding to the **Leads** section instead of dropping it.
 
-1. You can trace a concrete attack path: caller → function call → state change → loss/impact. Evaluate what the code _allows_, not what the deployer _might choose_.
+1. You can trace a concrete attack path: caller → function call → state change → loss/impact. Evaluate what the code _allows_, not what the deployer _might choose_. For any finding involving token transfers or swaps, verify which token moves IN and which moves OUT before concluding direction of impact.
 2. The entry point is reachable by the attacker (check modifiers, `msg.sender` guards, `onlyOwner`, access control).
-3. No existing guard already prevents the attack (`require`, `if`-revert, reentrancy lock, allowance check, etc.).
+3. No existing guard already prevents the attack (`require`, `if`-revert, reentrancy lock, allowance check, structural invariant like MINIMUM_LIQUIDITY preventing zero state, etc.).
 
 ## Confidence Score
 
@@ -23,6 +23,10 @@ Confidence measures certainty that the finding is real and exploitable — not h
 Confidence indicator: `[score]` (e.g., `[95]`, `[75]`, `[60]`).
 
 Findings below the confidence threshold (default 75) are still included in the report table but do not get a **Fix** section — description only.
+
+## Leads
+
+Vulnerability trails where the scanning agent found concrete code smells (missing guards, unsafe arithmetic, unvalidated external input) and traced a partial attack path, but ran out of analysis budget to fully confirm exploitation. Leads are NOT false positives — they are high-signal trails that need deeper manual investigation. Not scored or given a Fix — just a title, the code smells found, and a 1-2 sentence description of the vulnerability trail and what remains unverified.
 
 ## Do Not Report
 

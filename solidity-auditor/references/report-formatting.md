@@ -53,7 +53,20 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 ```
 ---
 
-< ... all findings >
+< ... all above-threshold findings >
+
+---
+
+[75] **3. <Title>**
+
+`ContractName.functionName` · Confidence: 75
+
+**Description**
+<The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+
+---
+
+< ... all below-threshold findings (description only, no Fix block) >
 
 ---
 
@@ -63,9 +76,16 @@ Findings List
 |---|---|---|
 | 1 | [95] | <title> |
 | 2 | [82] | <title> |
-| | | **Below Confidence Threshold** |
 | 3 | [75] | <title> |
-| 4 | [60] | <title> |
+
+---
+
+## Leads
+
+_Vulnerability trails with concrete code smells where the full exploit path could not be completed in one analysis pass. These are not false positives — they are high-signal leads for manual review. Not scored._
+
+- **<Title>** — `Contract.function` — Code smells: <missing guard, unsafe arithmetic, etc.> — <1-2 sentence description of the trail and what remains unverified>
+- **<Title>** — `Contract.function` — Code smells: <...> — <1-2 sentence description>
 
 ---
 
