@@ -19,42 +19,22 @@ Install the skill by pasting this prompt:
 Install skill https://github.com/pashov/skills/
 ```
 
-Run the skill by pasting this prompt:
+Run the skill by pasting either of these prompts (when your agent is in your project's directory):
+
+```
+run solidity auditor on the codebase
+```
 
 ```
 run solidity auditor on the *specified files*
 ```
-
-**Option 2 — Claude Code CLI:**
-
-```bash
-git clone https://github.com/pashov/skills.git && mkdir -p ~/.claude/commands && cp -r skills/solidity-auditor ~/.claude/commands/solidity-auditor
-```
-
-**Cursor:**
-
-```bash
-git clone https://github.com/pashov/skills.git && mkdir -p ~/.cursor/skills && cp -r skills/solidity-auditor ~/.cursor/skills/solidity-auditor
-```
-
-The skill is then invocable as `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
 
 **Update to latest:**
 
 AI CLI prompt (Recommended):
 
 ```
-update the solidity-auditor skill to latest from https://github.com/pashov/skills/
-```
-
-Or `cd` into the cloned `skills` repo and run:
-
-```bash
-git pull
-# Claude Code CLI:
-cp -r solidity-auditor ~/.claude/commands/solidity-auditor
-# Cursor:
-cp -r solidity-auditor ~/.cursor/skills/solidity-auditor
+update the solidity-auditor skill to latest version from https://github.com/pashov/skills/
 ```
 
 ---
