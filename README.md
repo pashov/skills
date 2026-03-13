@@ -9,9 +9,7 @@
 
 ## Install & Run
 
-Works with the **Claude Code CLI**, the **VS Code Claude extension**, and **Cursor**.
-
-**Option 1 (Recommended) — AI CLI (Claude Code / Codex / Cursor chat etc.):**
+**AI CLI (Claude Code / Codex / Cursor chat etc.):**
 
 Install the skill by pasting this prompt:
 
