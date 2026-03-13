@@ -23,6 +23,20 @@ git clone https://github.com/pashov/skills.git && mkdir -p ~/.claude/commands &&
 git clone https://github.com/pashov/skills.git && mkdir -p ~/.cursor/skills && cp -r skills/solidity-auditor ~/.cursor/skills/solidity-auditor
 ```
 
+**AI CLI (Claude Code / Cursor chat):**
+
+Install the skill by pasting this prompt:
+
+```
+Install skill https://github.com/pashov/skills/
+```
+
+Run the skill by pasting this prompt:
+
+```
+run solidity auditor on the *specified files*
+```
+
 The skill is then invocable as `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
 
 **Update to latest:** `cd` into the cloned `skills` repo and run:
