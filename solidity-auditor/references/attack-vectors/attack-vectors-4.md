@@ -1,6 +1,6 @@
 # Attack Vectors Reference (4/4)
 
-170 total attack vectors
+171 total attack vectors
 
 ---
 
@@ -239,3 +239,12 @@
 
 - **D:** Contract hashes raw calldata for uniqueness (`processedHashes[keccak256(msg.data)]`). Dynamic-type ABI encoding uses offset pointers — multiple distinct calldata layouts decode to identical values. Attacker bypasses dedup with semantically equivalent but bytewise-different calldata.
 - **FP:** Uniqueness check hashes decoded parameters: `keccak256(abi.encode(decodedParams))`. Nonce-based replay protection. Only fixed-size types in signature (no encoding ambiguity).
+
+---
+
+---
+
+**171. Short Address/Parameter Attack**
+
+- **D:** External applications or exchanges pass short parameters (e.g., 19-byte address instead of 20) during contract interaction. The EVM pads the missing bytes with trailing zeros, potentially multiplying the subsequent `amount` parameter.
+- **FP:** Input validation exists within the off-chain system, or contract explicitly verifies `msg.data.length` against the expected parameter size.
