@@ -39,7 +39,15 @@ git clone https://github.com/pashov/skills.git && mkdir -p ~/.cursor/skills && c
 
 The skill is then invocable as `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
 
-**Update to latest:** `cd` into the cloned `skills` repo and run:
+**Update to latest:**
+
+AI CLI prompt:
+
+```
+update the solidity-auditor skill to latest
+```
+
+Or `cd` into the cloned `skills` repo and run:
 
 ```bash
 git pull
