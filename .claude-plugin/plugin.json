@@ -1,0 +1,12 @@
+{
+  "name": "solidity-auditor",
+  "description": "Security audit skill for Solidity smart contracts",
+  "version": "1.0.0",
+  "author": {
+    "name": "Pashov Audit Group"
+  },
+  "repository": "https://github.com/pashov/skills",
+  "license": "MIT",
+  "keywords": ["solidity", "security", "audit", "smart-contracts"],
+  "skills": "./solidity-auditor"
+}
