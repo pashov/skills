@@ -28,10 +28,12 @@ _Portrayed below: finding multiple high-confidence vulnerabilities in a codebase
 
 # Write report to a markdown file (terminal-only by default)
 /solidity-auditor --file-output
+
+# Persist all intermediate agent outputs for replay and iteration
+/solidity-auditor --log-output
 ```
 
-## Known Limitations
+## Tips
 
-**Codebase size.** Works best up to ~2,500 lines of Solidity. Past ~5,000 lines, triage accuracy and mid-bundle recall drop noticeably. For large codebases, run per module rather than everything at once.
-
-**What AI misses.** AI is strong at pattern matching — missing access controls, unchecked return values, known reentrancy shapes. It struggles with relational reasoning: multi-transaction state setups, specification/invariant bugs, cross-protocol composability, game-theory attacks, and off-chain assumptions. AI catches what humans forget to check. Humans catch what AI cannot reason about. You need both.
+- **Target hot contracts.** Rather than scanning an entire repo, point the tool at the 2-5 contracts you're actively changing. Smaller scope means denser context for each agent and higher-signal findings.
+- **Run more than once.** LLM output is non-deterministic — each run can surface different vulnerabilities. Two or three passes over the same code often catch things a single pass misses.

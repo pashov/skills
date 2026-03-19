@@ -5,44 +5,118 @@ description: Security audit of Solidity code while you develop. Trigger on "audi
 
 # Smart Contract Security Audit
 
-You are the orchestrator of a parallelized smart contract security audit. Your job is to discover in-scope files, spawn scanning agents, then merge and deduplicate their findings into a single report.
+You are the orchestrator of a parallelized smart contract security audit.
 
 ## Mode Selection
 
-**Exclude pattern** (applies to all modes): skip directories `interfaces/`, `lib/`, `mocks/`, `test/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
+**Exclude pattern:** skip directories `interfaces/`, `lib/`, `mocks/`, `test/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
 
-- **Default** (no arguments): scan all `.sol` files using the exclude pattern. Use Bash `find` (not Glob) to discover files.
+- **Default** (no arguments): scan all `.sol` files using the exclude pattern. Use Bash `find` (not Glob).
 - **`$filename ...`**: scan the specified file(s) only.
 
 **Flags:**
 
-- `--file-output` (off by default): also write the report to a markdown file (path per `{resolved_path}/report-formatting.md`). Without this flag, output goes to the terminal only. Never write a report file unless the user explicitly passes `--file-output`.
-
-## Version Check
-
-After printing the banner, run two parallel tool calls: (a) Read the local `VERSION` file from the same directory as this skill, (b) Bash `curl -sf https://raw.githubusercontent.com/pashov/skills/main/solidity-auditor/VERSION`. If the remote fetch succeeds and the versions differ, print:
-
-> ⚠️ You are not using the latest version. Please upgrade for best security coverage. See https://github.com/pashov/skills#install--run
-
-Then continue normally. If the fetch fails (offline, timeout), skip silently.
+- `--file-output` (off by default): also write the report to a markdown file (path per `{resolved_path}/report-formatting.md`). Never write a report file unless explicitly passed.
+- `--log-output` (off by default): persist intermediate results to a timestamped directory. See **Logging**. Never write log files unless explicitly passed.
 
 ## Orchestration
 
-**Turn 1 — Discover.** Print the banner, then in the same message make parallel tool calls: (a) Bash `find` for in-scope `.sol` files per mode selection, (b) Glob for `**/references/attack-vectors/attack-vectors-1.md` and extract the `references/` directory path (two levels up), (c) ToolSearch `select:Agent` to pre-load the Agent tool for Turn 3. Use this resolved path as `{resolved_path}` for all subsequent references.
+**Turn 1 — Discover.** Print the banner, then make these parallel tool calls in one message:
 
-**Turn 2 — Prepare.** In a single message, make parallel tool calls: (a) Read `{resolved_path}/report-formatting.md`, (b) Bash: create per-agent bundle files in a **single command**. Always create `/tmp/audit-agent-{1,2,3,4}-bundle.md` — each concatenates **all** in-scope `.sol` files (with `### path` headers and fenced code blocks), then `{resolved_path}/attack-vectors/attack-vectors-N.md`, then `{resolved_path}/hacking-agents/vector-scan-agent.md`. Also create `/tmp/audit-agent-5-bundle.md` — concatenates all in-scope `.sol` files (same format), then `{resolved_path}/hacking-agents/adversarial-reasoning-agent.md`. Also create `/tmp/audit-fp-gate-bundle.md` — concatenates all in-scope `.sol` files (same format), then `{resolved_path}/judging.md`, then `{resolved_path}/report-formatting.md`, then `{resolved_path}/operations-agents/fp-gate-agent.md`. Print line counts for every bundle created. Every agent receives the full codebase — only the trailing reference file differs. Do NOT read or inline any file content into agent prompts — the bundle files replace that entirely.
+a. Bash `find` for in-scope `.sol` files per mode selection
+b. Glob for `**/references/attack-vectors/attack-vectors.md` — extract the `references/` directory (two levels up) as `{resolved_path}`
+c. ToolSearch `select:Agent`
+d. Read the local `VERSION` file from the same directory as this skill
+e. Bash `curl -sf https://raw.githubusercontent.com/pashov/skills/main/solidity-auditor/VERSION`
+f. Bash `mktemp -d /tmp/audit-XXXXXX` → store as `{bundle_dir}`
 
-**Turn 3 — Spawn.** In a single message, spawn all 5 agents as parallel foreground Agent tool calls (do NOT use `run_in_background`).
+If the remote VERSION fetch succeeds and differs from local, print `⚠️ You are not using the latest version. Please upgrade for best security coverage. See https://github.com/pashov/skills`. If it fails, skip silently. If `--log-output`: also Bash `mkdir -p assets/audit-logs/{YYYYMMDD-HHMMSS}/` → `{log_dir}` (can parallel with above).
 
-- **Agents 1–4** (vector scanning) — Do NOT paste agent instructions into the prompt — they are already inside each bundle. Prompt: `Your bundle file is /tmp/audit-agent-N-bundle.md (XXXX lines).` (substitute the real agent number and line count).
-- **Agent 5** (adversarial reasoning) — Do NOT paste agent instructions into the prompt — they are already inside the bundle. Prompt: `Your bundle file is /tmp/audit-agent-5-bundle.md (XXXX lines).` (substitute the real line count).
+**Turn 2 — Prepare.** In one message, make parallel tool calls: (a) Read `{resolved_path}/report-formatting.md`, (b) Read `{resolved_path}/judging.md`.
 
-**Turn 4 — Report.** Process agent findings in this strict order:
+Then **classify** each in-scope file by path/name heuristics (do NOT read files for classification):
 
-1. **Pre-filter.** Scan all raw findings and immediately drop any that are informational-only (error messages, naming, gas, NatSpec, admin-only parameter setting, missing events, centralization without concrete exploit path). One word per drop — no analysis.
-2. **Deduplicate.** Group surviving findings by root cause (same contract + same function + same bug class). Keep only the most detailed version of each group, drop the rest. List groups: `"Chainlink staleness: Agent 2, Agent 3, Agent 4 → keep Agent 3"`.
-3. **Validate.** Spawn a single foreground Agent. Do NOT paste agent instructions into the prompt — they are already inside the bundle. Paste all deduplicated findings and leads verbatim into the prompt, then add: `Validation bundle: /tmp/audit-fp-gate-bundle.md (XXXX lines). Files reviewed: <file list>.` Substitute the real line count and file list.
-4. **Output.** Print the validation agent's formatted report verbatim. If `--file-output` is set, also write it to a file (path per report-formatting.md) and print the path.
+- **Core** — entry-point contracts, main business logic, state-changing external/public functions that move value or update critical storage. Top 30–40% of files by importance.
+- **Peripheral** — interfaces, abstract bases, libraries, pure helpers, access-control boilerplate, simple wrappers.
+
+**Heuristic rules** (apply in order, first match wins):
+- Filename starts with `I` + uppercase letter (e.g., `IERC20.sol`, `ISolvBTC.sol`) → Peripheral
+- Path contains `interfaces/`, `access/`, `utils/`, `external/`, `governance/`, `libraries/` → Peripheral
+- Filename contains `Factory`, `Deployer`, `Proxy`, `Beacon` → Peripheral
+- Filename ends with `.t.sol`, `.s.sol`, or contains `Test`, `Mock`, `Script` → skip (already excluded)
+- Filename contains `Oracle` → Peripheral
+- Everything else → Core
+- If fewer than 30% of files are Core, demote the smallest/simplest remaining Core files. If more than 40%, promote the most important Peripheral files.
+- If a classification is genuinely ambiguous from the name alone, read that file (and only that file) to decide.
+
+Write classification to `{bundle_dir}/classification.md` (two sections: `## Core`, `## Peripheral`).
+
+Then build all bundles in a single Bash command using `cat` (not shell variables or heredocs):
+
+1. `{bundle_dir}/core-source.md` — core `.sol` files, each with a `### path` header and fenced code block.
+2. `{bundle_dir}/file-manifest.md` — peripheral file paths (one per line, `- ` prefix), header `# Peripheral Files (read on demand)`.
+3. Agent bundles = `core-source.md` + `file-manifest.md` + agent-specific files:
+
+| Bundle               | Appended files (relative to `{resolved_path}`)                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `agent-1-bundle.md`  | `attack-vectors/attack-vectors.md` + `hacking-agents/vector-scan-agent.md` + `hacking-agents/shared-rules.md`   |
+| `agent-2-bundle.md`  | `hacking-agents/math-precision-agent.md` + `hacking-agents/shared-rules.md`                                     |
+| `agent-3-bundle.md`  | `hacking-agents/access-control-agent.md` + `hacking-agents/shared-rules.md`                                     |
+| `agent-4-bundle.md`  | `hacking-agents/economic-security-agent.md` + `hacking-agents/shared-rules.md`                                  |
+| `agent-5-bundle.md`  | `hacking-agents/execution-trace-agent.md` + `hacking-agents/shared-rules.md`                                    |
+| `agent-6-bundle.md`  | `hacking-agents/invariant-agent.md` + `hacking-agents/shared-rules.md`                                          |
+| `agent-7-bundle.md`  | `hacking-agents/periphery-agent.md` + `hacking-agents/shared-rules.md`                                          |
+| `agent-8-bundle.md`  | `hacking-agents/first-principles-agent.md` + `hacking-agents/shared-rules.md`                                   |
+
+Print line counts for every bundle, `core-source.md`, and `file-manifest.md`. Do NOT inline file content into agent prompts.
+
+**Turn 3 — Spawn.** In one message, spawn all 8 agents as parallel foreground Agent calls. Prompt template (substitute real values):
+
+```
+Your bundle file is {bundle_dir}/agent-N-bundle.md (XXXX lines).
+The bundle contains core source code inline and a peripheral file manifest.
+Read the bundle first, then read peripheral files relevant to your specialty.
+```
+
+If `--log-output`: after all agents return, write each output to `{log_dir}/agent-{N}-output.md` (8 parallel writes).
+
+**Turn 4 — Deduplicate.** Parse every FINDING and LEAD from all 8 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
+
+Check for **composite chains**: if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B). Most audits have 0–2.
+
+Output the deduplicated list as text (not to a file):
+
+```
+## [N] Title
+- **Type:** FINDING | LEAD
+- **Contract:** contract name
+- **Function:** function name
+- **Bug class:** tag
+- **Agents:** [agents: N]
+- **Description:** one-paragraph summary from the best agent version
+- **Key code:** the relevant code snippet or location
+```
+
+If `--log-output`: also write to `{log_dir}/dedup-decisions.md` and `{log_dir}/chain-analysis.md`.
+
+**Turn 5 — Validate & output.** No file reads needed — all context is available from prior turns.
+
+1. **Gate evaluation.** Run each finding through the four gates in `judging.md` (do not skip or reorder).
+
+   **Single-pass protocol:** evaluate every relevant code path ONCE in fixed order (constructor → setters → swap functions → mint → burn → liquidate). One-line verdict per path: `BLOCKS`, `ALLOWS`, `IRRELEVANT`, or `UNCERTAIN`. Commit after all paths — do not re-examine. `UNCERTAIN` = `ALLOWS`.
+
+2. **Lead promotion & rejection guardrails.**
+   - Promote LEAD → FINDING (confidence 75) if: complete exploit chain traced in source, OR `[agents: 2+]` demoted (not rejected) the same issue.
+   - `[agents: 2+]` does NOT override a concrete refutation — demote to LEAD if refutation is uncertain.
+   - No deployer-intent reasoning — evaluate what the code _allows_, not how the deployer _might_ use it.
+
+3. **Fix verification** (confidence ≥ 80 only): trace the attack with fix applied; verify no new DoS, reentrancy, or broken invariants (use `safeTransfer` not `require(token.transfer(...))`); list all locations if the pattern repeats. If no safe fix exists, omit it with a note.
+
+4. **Format and print** per `report-formatting.md`. Exclude rejected items. If `--file-output`: also write to file. If `--log-output`: write `{log_dir}/final-report.md` and `{log_dir}/gate-results.md`, print `📂 Audit logs saved to {log_dir}`.
+
+## Logging
+
+When `--log-output` is set, write to `assets/audit-logs/{YYYYMMDD-HHMMSS}/`: `agent-{1-8}-output.md`, `dedup-decisions.md`, `chain-analysis.md`, `gate-results.md`, `final-report.md`.
 
 ## Banner
 
