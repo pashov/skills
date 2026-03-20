@@ -1,7 +1,9 @@
 **1. Cross-Chain Message Spoofing (Missing Endpoint/Peer Validation)**
 
 - **D:** Receiver contract accepts cross-chain messages without verifying `msg.sender == endpoint` and `_origin.sender == registeredPeer[srcChainId]`. Attacker calls the receive function directly with fabricated message data, triggering unauthorized mints/unlocks.
-- **FP:** `onlyPeer` modifier or equivalent checks both `msg.sender` (endpoint) and `_origin.sender` (peer). Standard `OAppReceiver._acceptNonce` validates origin.**2. EIP-7702 Code Inspection Opcode Invalidation**
+- **FP:** `onlyPeer` modifier or equivalent checks both `msg.sender` (endpoint) and `_origin.sender` (peer). Standard `OAppReceiver._acceptNonce` validates origin.
+
+**2. EIP-7702 Code Inspection Opcode Invalidation**
 
 - **D:** `extcodesize`, `extcodehash`, `extcodecopy` on delegated EOA operate on the 23-byte `0xef0100` delegation stub, not the delegate's code. `isContract()` checks misroute delegated EOAs. `extcodehash` comparisons against known implementation hashes fail. Proxy detection and ERC-1167 clone verification return unexpected results.
 - **FP:** No security-critical branching on `extcodesize`/`extcodehash`. Uses `CODESIZE`/`CODECOPY` within execution context (which follow delegation) rather than `EXT*` variants.
@@ -486,7 +488,8 @@
 
 **97. Cross-Chain Deployment Replay**
 
-- **D:** Deployment tx replayed on another chain. Same deployer nonce on both chains produces same CREATE address under different control. No EIP-155 chain ID protection..- **FP:** EIP-155 signatures. `CREATE2` via deterministic factory at same address on all chains. Per-chain deployer EOAs.
+- **D:** Deployment tx replayed on another chain. Same deployer nonce on both chains produces same CREATE address under different control. No EIP-155 chain ID protection.
+- **FP:** EIP-155 signatures. `CREATE2` via deterministic factory at same address on all chains. Per-chain deployer EOAs.
 
 **98. abi.encodePacked Hash Collision with Dynamic Types**
 
@@ -500,12 +503,15 @@
 
 **100. Arbitrary `delegatecall` in Implementation**
 
-- **D:** Implementation exposes `delegatecall` to user-supplied address without restriction. Pattern: `target.delegatecall(data)` where `target` is caller-controlled..- **FP:** Target is hardcoded immutable address. Whitelist of approved targets enforced. `call` used instead.
+- **D:** Implementation exposes `delegatecall` to user-supplied address without restriction. Pattern: `target.delegatecall(data)` where `target` is caller-controlled.
+- **FP:** Target is hardcoded immutable address. Whitelist of approved targets enforced. `call` used instead.
 
 **101. Cross-Chain Reentrancy via Safe Transfer Callbacks**
 
 - **D:** Cross-chain receive function (`lzReceive`, `_credit`) calls `_safeMint` or `_safeTransfer` before updating supply/ownership counters. The `onERC721Received` / `onERC1155Received` callback re-enters to initiate another cross-chain send before state is finalized, creating duplicate tokens or double-spending.
-- **FP:** State updates (counters, balances) committed before any safe transfer. `nonReentrant` on receive path. `_mint` used instead of `_safeMint` (no callback).**102. Hook Callback Reentrancy for Fee Bypass**
+- **FP:** State updates (counters, balances) committed before any safe transfer. `nonReentrant` on receive path. `_mint` used instead of `_safeMint` (no callback).
+
+**102. Hook Callback Reentrancy for Fee Bypass**
 
 - **D:** User-controlled hook (beforeClaim, onReceive) fires mid-operation before fee accounting finalized. User reenters different contract via alternate path that skips fee deduction.
 - **FP:** Global reentrancy lock (not per-function). Hook fires after all state changes and fees finalized. Cross-contract mutex.
@@ -572,7 +578,8 @@
 
 **115. Proxy Admin Key Compromise**
 
-- **D:** `ProxyAdmin.owner()` returns EOA, not multisig/governance; no timelock on `upgradeTo`..- **FP:** Multisig (threshold >= 2) + timelock (24-72h). Admin role separate from operational roles.
+- **D:** `ProxyAdmin.owner()` returns EOA, not multisig/governance; no timelock on `upgradeTo`.
+- **FP:** Multisig (threshold >= 2) + timelock (24-72h). Admin role separate from operational roles.
 
 **116. ERC4626 convertToAssets Used Instead of previewWithdraw**
 
@@ -756,7 +763,8 @@
 
 **152. Non-Atomic Proxy Initialization (Front-Running `initialize()`)**
 
-- **D:** Proxy deployed in one tx, `initialize()` called in separate tx. Uninitialized proxy front-runnable. Pattern: `new TransparentUpgradeableProxy(impl, admin, "")` with empty data, separate `initialize()`..- **FP:** Proxy constructor receives init calldata atomically: `new TransparentUpgradeableProxy(impl, admin, abi.encodeCall(...))`. OZ `deployProxy()` used.
+- **D:** Proxy deployed in one tx, `initialize()` called in separate tx. Uninitialized proxy front-runnable. Pattern: `new TransparentUpgradeableProxy(impl, admin, "")` with empty data, separate `initialize()`.
+- **FP:** Proxy constructor receives init calldata atomically: `new TransparentUpgradeableProxy(impl, admin, abi.encodeCall(...))`. OZ `deployProxy()` used.
 
 **153. Hardcoded Network-Specific Addresses**
 
@@ -1085,7 +1093,8 @@
 
 **218. Uniswap V4 Hook Access Control and State Manipulation**
 
-- **D:** Hook callback (`beforeSwap`, `afterSwap`) missing `require(msg.sender == address(poolManager))`. Attacker calls hook directly. Second pattern: hook uses `balanceOf(address(this))` — donatable..- **FP:** All hooks restricted to PoolManager caller. Internal accounting (not `balanceOf`). No custom token accounting in hooks.
+- **D:** Hook callback (`beforeSwap`, `afterSwap`) missing `require(msg.sender == address(poolManager))`. Attacker calls hook directly. Second pattern: hook uses `balanceOf(address(this))` — donatable.
+- **FP:** All hooks restricted to PoolManager caller. Internal accounting (not `balanceOf`). No custom token accounting in hooks.
 
 **219. Chainlink Feed Deprecation / Wrong Decimal Assumption**
 
@@ -1094,7 +1103,8 @@
 
 **220. EIP-7702 tx.origin == msg.sender Bypass**
 
-- **D:** `require(tx.origin == msg.sender)` as EOA gate or reentrancy guard. Delegated EOA passes check while executing arbitrary contract logic — enables flash loans, atomic governance manipulation, and reentrancy through "EOA-only" functions..- **FP:** Additional `require(msg.sender.code.length == 0)` check (delegated EOAs have 23-byte `0xef0100` stub). Function protected by time-lock, multi-sig, or past-block snapshot.
+- **D:** `require(tx.origin == msg.sender)` as EOA gate or reentrancy guard. Delegated EOA passes check while executing arbitrary contract logic — enables flash loans, atomic governance manipulation, and reentrancy through "EOA-only" functions.
+- **FP:** Additional `require(msg.sender.code.length == 0)` check (delegated EOAs have 23-byte `0xef0100` stub). Function protected by time-lock, multi-sig, or past-block snapshot.
 
 **221. Deployment Transaction Front-Running (Ownership Hijack)**
 
@@ -1139,7 +1149,9 @@
 **229. Ordered Message Channel Blocking (Nonce DoS)**
 
 - **D:** OApp uses ordered nonce execution. If one message permanently reverts on destination (e.g., recipient contract reverts, invalid state), ALL subsequent messages from that source are blocked.
-- **FP:** Unordered nonce mode used (LayerZero V2 default). `_lzReceive` wrapped in try/catch with fallback logic. `NonblockingLzApp` pattern (V1). Admin can `skipPayload` / `clearPayload` to unblock.**230. require(token.transfer()) Reverts on Void-Return Tokens**
+- **FP:** Unordered nonce mode used (LayerZero V2 default). `_lzReceive` wrapped in try/catch with fallback logic. `NonblockingLzApp` pattern (V1). Admin can `skipPayload` / `clearPayload` to unblock.
+
+**230. require(token.transfer()) Reverts on Void-Return Tokens**
 
 - **D:** `require(IERC20(token).transfer(to, amount))` expects `bool` return. USDT returns void — ABI decoder reverts even on successful transfer. Pattern: `require(token.transfer(...))` instead of `token.safeTransfer(...)`.
 - **FP:** SafeERC20 `safeTransfer`/`safeTransferFrom` used throughout. Only bool-returning tokens accepted.
@@ -1147,9 +1159,12 @@
 **231. Insufficient Return Data Length Validation**
 
 - **D:** Assembly `staticcall`/`call` writes return data into a fixed-size buffer (e.g., `staticcall(gas(), token, ptr, 4, ptr, 32)`) then reads `mload(ptr)` without checking `returndatasize() >= 32`. If the target is an EOA (no code, zero return data) or a non-compliant contract returning fewer bytes, `mload` reads stale memory at `ptr`, which may decode as a truthy value — silently treating a failed/absent call as success.
-- **FP:** `if lt(returndatasize(), 32) { revert(0,0) }` checked before reading return data. `extcodesize(target)` verified > 0 before call. Safe ERC20 pattern that handles both zero-length and 32-byte returns.**232. UUPS `_authorizeUpgrade` Missing Access Control**
+- **FP:** `if lt(returndatasize(), 32) { revert(0,0) }` checked before reading return data. `extcodesize(target)` verified > 0 before call. Safe ERC20 pattern that handles both zero-length and 32-byte returns.
 
-- **D:** `function _authorizeUpgrade(address) internal override {}` with empty body and no access modifier. Anyone can call `upgradeTo()`..- **FP:** `_authorizeUpgrade()` has `onlyOwner` or equivalent. Multisig/governance controls owner role.
+**232. UUPS `_authorizeUpgrade` Missing Access Control**
+
+- **D:** `function _authorizeUpgrade(address) internal override {}` with empty body and no access modifier. Anyone can call `upgradeTo()`.
+- **FP:** `_authorizeUpgrade()` has `onlyOwner` or equivalent. Multisig/governance controls owner role.
 
 **233. Liquidated Position Continues Accruing Rewards**
 
@@ -1268,7 +1283,8 @@
 
 **256. ERC1155 totalSupply Inflation via Reentrancy Before Supply Update**
 
-- **D:** `totalSupply[id]` incremented AFTER `_mint` callback. During `onERC1155Received`, `totalSupply` is stale-low, inflating caller's share in any supply-dependent formula..- **FP:** OZ >= 4.3.2 (patched ordering). `nonReentrant` on all mint functions. No supply-dependent logic callable from mint callback.
+- **D:** `totalSupply[id]` incremented AFTER `_mint` callback. During `onERC1155Received`, `totalSupply` is stale-low, inflating caller's share in any supply-dependent formula.
+- **FP:** OZ >= 4.3.2 (patched ordering). `nonReentrant` on all mint functions. No supply-dependent logic callable from mint callback.
 
 **257. Solmate SafeTransferLib Missing Contract Existence Check**
 
@@ -1277,7 +1293,8 @@
 
 **258. Re-initialization Attack**
 
-- **D:** V2 uses `initializer` instead of `reinitializer(2)`. Or upgrade resets initialized counter / storage-collides bool to false..- **FP:** `reinitializer(version)` with correctly incrementing versions for V2+. Tests verify `initialize()` reverts after first call.
+- **D:** V2 uses `initializer` instead of `reinitializer(2)`. Or upgrade resets initialized counter / storage-collides bool to false.
+- **FP:** `reinitializer(version)` with correctly incrementing versions for V2+. Tests verify `initialize()` reverts after first call.
 
 **259. Protocol Fee Inflates Reward Accumulator**
 
@@ -1302,7 +1319,9 @@
 **263. Unauthorized Peer Initialization (Fake Peer Attack)**
 
 - **D:** `setPeer()` / `setTrustedRemote()` sets the remote peer address that a cross-chain contract trusts. If the owner is compromised or `setPeer` lacks proper access control, an attacker registers a fraudulent peer contract on the source chain that can mint/unlock tokens on the destination without legitimate deposits. Pattern: `setPeer` callable by non-owner, or owner key compromised.
-- **FP:** `setPeer` protected by multisig + timelock. Peer addresses verified against known deployment registry. `allowInitializePath()` properly implemented to reject unknown peers.**264. Diamond Proxy Facet Selector Collision**
+- **FP:** `setPeer` protected by multisig + timelock. Peer addresses verified against known deployment registry. `allowInitializePath()` properly implemented to reject unknown peers.
+
+**264. Diamond Proxy Facet Selector Collision**
 
 - **D:** EIP-2535 Diamond where two facets register same 4-byte selector. Malicious facet via `diamondCut` hijacks calls to critical functions. Pattern: `diamondCut` adds facet with overlapping selectors, no on-chain collision check.
 - **FP:** `diamondCut` validates no selector collisions. `DiamondLoupeFacet` enumerates/verifies selectors post-cut. Multisig + timelock on `diamondCut`.

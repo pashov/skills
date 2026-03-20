@@ -16,7 +16,7 @@ Resolve paths, create the plugin symlink, get the commit hash, and generate a ti
 `SKILL_DIR` is the `solidity-auditor/` directory (parent of `evals/`). `REPO_ROOT` is its parent (the git repo root). Both must be absolute paths.
 
 ```bash
-REPO_ROOT="/Users/krum/Workspace/skills"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL_DIR="$REPO_ROOT/solidity-auditor"
 mkdir -p /tmp/audit-plugin/skills && ln -sfn "$SKILL_DIR" /tmp/audit-plugin/skills/solidity-auditor
 COMMIT=$(git -C "$REPO_ROOT" rev-parse --short=7 HEAD)

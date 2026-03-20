@@ -16,7 +16,7 @@
 
 ## What to Contribute
 
-- **Attack vectors** — add new vectors to `attack-vectors-4.md` following the existing `**D:**` / `**FP:**` format. Update the total count in all 4 files.
+- **Attack vectors** — add new vectors to `solidity-auditor/references/attack-vectors/attack-vectors.md` following the existing `**D:**` / `**FP:**` format.
 - **Agent prompts** — improve triage accuracy, reduce false positives, tighten output format.
 - **Report formatting** — improve the output structure or fix template issues.
 - **Bug fixes** — if the skill produces incorrect output, open an issue or PR with a fix.
