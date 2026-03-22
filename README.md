@@ -14,7 +14,7 @@
 ## Install, Run & Update Prompts
 
 ```
-Install https://github.com/pashov/skills/ and run solidity auditor on the codebase
+Install https://github.com/pashov/skills/ and run solidity auditor with all different agents possible on the codebase
 ```
 
 ```
