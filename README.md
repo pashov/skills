@@ -18,7 +18,7 @@ Install https://github.com/pashov/skills/ and run solidity auditor on the codeba
 ```
 
 ```
-run solidity auditor on *specified files*
+run the solidity auditor with all the different agents possible on *specified files*
 ```
 
 ```
