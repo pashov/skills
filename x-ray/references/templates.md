@@ -334,11 +334,11 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 [Docs: EXPOSED=no NatSpec + no spec, FRAGILE=sparse NatSpec, ADEQUATE=NatSpec present, HARDENED=+ spec/whitepaper, FORTIFIED=+ thorough inline comments]
 [Access Control: EXPOSED=unclear roles, FRAGILE=roles exist + no timelock, ADEQUATE=roles + boundaries clear, HARDENED=+ timelock or multisig, FORTIFIED=+ emergency pause]
 
-**Key observations:**
-1. [Most significant structural or security observation from the report]
-2. [Second observation]
-3. [Third observation]
-[3-5 items, ordered by significance. Factual observations derived from the report — not directives or recommendations.]
+**Structural facts:**
+1. [Verifiable structural fact — e.g., "15K nSLOC across N subsystems", "N upgradeable contracts", "2 developers wrote N% of code"]
+2. [...]
+3. [...]
+[3-5 items. ONLY measurable, verifiable facts from Sections 1-6. No security claims, no speculation about what "could" happen, no bug hypotheses, no attack scenarios. The verdict describes the codebase's structural posture (tests, docs, access control, complexity) — NOT its security. The auditor forms their own security conclusions.]
 ```
 # Entry Point Map Template
 
