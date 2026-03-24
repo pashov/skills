@@ -47,10 +47,11 @@ Then build all bundles in a single Bash command using `cat` (not shell variables
 | `agent-6-bundle.md`  | `hacking-agents/invariant-agent.md` + `hacking-agents/shared-rules.md`                                          |
 | `agent-7-bundle.md`  | `hacking-agents/periphery-agent.md` + `hacking-agents/shared-rules.md`                                          |
 | `agent-8-bundle.md`  | `hacking-agents/first-principles-agent.md` + `hacking-agents/shared-rules.md`                                   |
+| `agent-9-bundle.md`  | `hacking-agents/deployment-payload-agent.md` + `hacking-agents/shared-rules.md`                                 |
 
 Print line counts for every bundle and `source.md`. Do NOT inline file content into agent prompts.
 
-**Turn 3 — Spawn.** In one message, spawn all 8 agents as parallel foreground Agent calls. Prompt template (substitute real values):
+**Turn 3 — Spawn.** In one message, spawn all 9 agents as parallel foreground Agent calls. Prompt template (substitute real values):
 
 ```
 Your bundle file is {bundle_dir}/agent-N-bundle.md (XXXX lines).
@@ -60,7 +61,7 @@ Read the bundle fully before producing findings.
 
 **Turn 4 — Deduplicate, validate & output.** Single-pass: deduplicate all agent results, gate-evaluate, and produce the final report in one turn. Do NOT print an intermediate dedup list — go straight to the report.
 
-1. **Deduplicate.** Parse every FINDING and LEAD from all 8 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
+1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
 
    Check for **composite chains**: if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B). Most audits have 0–2.
 
