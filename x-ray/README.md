@@ -22,15 +22,7 @@ _Part of an X-Ray report generation shown below_
 ## Usage
 
 ```
-Install https://github.com/pashov/skills/ and run x-ray on the codebase
-```
-
-```
-run x-ray on path/to/protocol
-```
-
-```
-update skill to latest version
+Install latest https://github.com/pashov/skills/ and run x-ray on the codebase
 ```
 
 ## Tips
