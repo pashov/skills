@@ -1,23 +1,17 @@
 # X-Ray
 
-Know your protocol before auditors do.
-
 Built for:
 
-- **Protocol teams** preparing for an audit — fix the obvious so auditors can focus on what matters
-- **Security researchers** starting a new engagement — get the full picture in minutes
+- **Protocol teams** — stay aware of your threat model and security gaps throughout development and before audits
+- **Security researchers** — get the full picture in minutes on new audit start
 
-Not a vulnerability scanner — it's the briefing you read before opening the first file.
+Not a vulnerability scanner — it's the briefing you read before opening the first file. One command produces:
 
-## What You Get
-
-One command produces:
-
-| Output | What's Inside |
-|--------|--------------|
-| `x-ray.md` | Protocol overview, threat model, invariants, test gaps, git history, readiness verdict |
-| `entry-points.md` | Every state-changing function classified by access level with call chains |
-| `architecture.svg` | Visual architecture diagram — contracts, actors, trust boundaries |
+| Output             | What's Inside                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `x-ray.md`         | Protocol overview, threat model, invariants, test gaps, git history, readiness verdict |
+| `entry-points.md`  | Every state-changing function classified by access level with call chains              |
+| `architecture.svg` | Visual architecture diagram — contracts, actors, trust boundaries                      |
 
 ## Demo
 

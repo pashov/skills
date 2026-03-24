@@ -14,15 +14,17 @@
 ## Install, Run & Update Prompts
 
 ```
+Install https://github.com/pashov/skills/ and run an x-ray on the codebase
 Install https://github.com/pashov/skills/ and run solidity auditor with all different agents possible on the codebase
 ```
 
 ```
+run an x-ray on the codebase
 run the solidity auditor with all the different agents possible on *specified files*
 ```
 
 ```
-update skill to latest version
+update skills to latest version
 ```
 
 ---
@@ -32,6 +34,7 @@ update skill to latest version
 | Skill                                 | Description                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------- |
 | [solidity-auditor](solidity-auditor/) | Fast (typically <5 min) security feedback on Solidity changes while you develop |
+| [x-ray](x-ray/)                       | Pre-audit scan with threat model, invariants, entry points, and git analysis    |
 
 ---
 
