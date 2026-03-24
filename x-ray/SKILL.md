@@ -22,6 +22,11 @@ mkdir -p [project-root]/x-ray && bash $SKILL_DIR/scripts/enumerate.sh [project-r
 
 **Immediately after**, launch ALL of the following in a single message (parallel):
 
+**0. Version check** (foreground):
+- Read the local `VERSION` file from `$SKILL_DIR/VERSION`
+- Bash `curl -sf https://raw.githubusercontent.com/pashov/skills/main/x-ray/VERSION`
+- If the remote VERSION fetch succeeds and differs from local, print `⚠️ You are not using the latest version. Please upgrade for best security coverage. See https://github.com/pashov/skills`. If it fails, skip silently.
+
 **1. Coverage** (`run_in_background: true`):
 
 For Foundry:
