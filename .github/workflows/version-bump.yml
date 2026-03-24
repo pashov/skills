@@ -6,13 +6,10 @@ on:
     paths:
       - 'solidity-auditor/**'
       - '!solidity-auditor/VERSION'
-      - 'x-ray/**'
-      - '!x-ray/VERSION'
 
 jobs:
-  bump-solidity-auditor:
+  bump:
     runs-on: ubuntu-latest
-    if: contains(join(github.event.commits.*.modified, ','), 'solidity-auditor/') || contains(join(github.event.commits.*.added, ','), 'solidity-auditor/')
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,28 +29,4 @@ jobs:
           git add solidity-auditor/VERSION
           git diff --cached --quiet && exit 0
           git commit -m "bump(solidity-auditor): $(cat solidity-auditor/VERSION)"
-          git push
-
-  bump-x-ray:
-    runs-on: ubuntu-latest
-    if: contains(join(github.event.commits.*.modified, ','), 'x-ray/') || contains(join(github.event.commits.*.added, ','), 'x-ray/')
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Bump version
-        run: |
-          CURRENT=$(cat x-ray/VERSION | tr -d '[:space:]')
-          NEW=$((CURRENT + 1))
-          echo "$NEW" > x-ray/VERSION
-          echo "Version bump: ${CURRENT} -> ${NEW}"
-
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add x-ray/VERSION
-          git diff --cached --quiet && exit 0
-          git commit -m "bump(x-ray): $(cat x-ray/VERSION)"
           git push
