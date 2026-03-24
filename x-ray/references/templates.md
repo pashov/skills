@@ -557,6 +557,6 @@ Then `Read` the PNG. If no renderer is available, skip the validation loop.
 
 ### Cleanup
 ```bash
-rm -f x-ray/architecture.json /tmp/architecture-preview.png
+rm -f x-ray/architecture.json x-ray/git-security-analysis.json /tmp/architecture-preview.png
 ```
 

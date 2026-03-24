@@ -250,7 +250,11 @@ The git analysis is scoped to the **current branch only** (HEAD). The `git_branc
 python3 $SKILL_DIR/scripts/generate_svg.py x-ray/architecture.json x-ray/architecture.svg
 ```
 
-Then follow the rendering, audit checklist, and fix loop in the architecture guide section of `references/templates.md`. Max 3 iterations. Cleanup temp files after.
+Then follow the rendering, audit checklist, and fix loop in the architecture guide section of `references/templates.md`. Max 3 iterations. Cleanup temp files after (including `x-ray/git-security-analysis.json`).
+
+### 3c. Terminal Verdict
+
+After all files are written and cleanup is done, read the `## X-Ray Verdict` section from the generated `x-ray/x-ray.md` and print it verbatim to the terminal. Do NOT paraphrase, summarize, or rewrite — copy the exact tier, justification, and key observations as they appear in the file.
 
 ## Constraints
 
