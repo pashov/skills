@@ -27,6 +27,12 @@ run the solidity auditor with all the different agents possible on *specified fi
 update skills to latest version
 ```
 
+### Install via skills.sh
+
+```
+npx skills add pashov/skills
+```
+
 ---
 
 ## Skills
