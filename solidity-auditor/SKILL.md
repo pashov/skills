@@ -174,10 +174,17 @@ Before bundling, expand the audit scope and write a hotspot checklist:
 | `agent-6-bundle.md`  | `hacking-agents/invariant-agent.md` + `hacking-agents/shared-rules.md`                                          |
 | `agent-7-bundle.md`  | `hacking-agents/periphery-agent.md` + `hacking-agents/shared-rules.md`                                          |
 | `agent-8-bundle.md`  | `hacking-agents/first-principles-agent.md` + `hacking-agents/shared-rules.md`                                   |
+| `agent-9-bundle.md`  | `hacking-agents/deployment-payload-agent.md` + `hacking-agents/shared-rules.md`                                 |
 
 Print line counts for every bundle and `source.md`. Do NOT inline file content into agent prompts.
 
-**Turn 3 — Spawn.** In one message, spawn all 8 agents as parallel foreground Agent calls. Prompt template (substitute real values):
+**Turn 3 — Spawn.** Use all available agent capacity.
+
+- If the runtime can host all 9 agents concurrently, spawn all 9 in parallel.
+- If the runtime supports fewer concurrent agents, spawn as many as available, wait for completions, then reuse or batch the remaining agent roles until all 9 bundles have been analyzed.
+- Do not fail or silently skip roles just because the environment has fewer threads than the ideal bundle count.
+
+Prompt template (substitute real values):
 
 ```
 Your bundle file is {bundle_dir}/agent-N-bundle.md (XXXX lines).
@@ -188,7 +195,7 @@ You must include at least one non-standard / unusual exploit attempt from the di
 
 **Turn 4 — Deduplicate, validate & output.** Single-pass: deduplicate all agent results, gate-evaluate, and produce the final report in one turn. Do NOT print an intermediate dedup list — go straight to the report.
 
-1. **Deduplicate.** Parse every FINDING and LEAD from all 8 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
+1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
 
    Check for **composite chains**: if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B). Most audits have 0–2.
 
