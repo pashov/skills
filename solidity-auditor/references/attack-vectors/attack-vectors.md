@@ -1335,3 +1335,8 @@
 
 - **D:** Contract implements `onERC1155Received` but not `onERC1155BatchReceived` (or returns wrong selector). `safeBatchTransferFrom` reverts, blocking batch settlement/distribution.
 - **FP:** Both callbacks implemented correctly, or inherits OZ `ERC1155Holder`. Protocol exclusively uses single-item `safeTransferFrom`.
+
+**267. Nonlinear Curve Midpoint Bias + Gross/Net Reserve Mismatch**
+
+- **D:** Custom pricing curve uses nonlinear math (`ln`, `exp`, `pow`, sigmoid, bonding curve) but approximates execution with midpoint / average price instead of the true integral. Output is computed from post-fee input while reserves or pool inventory are updated with the gross specified amount. The attacker alternates `A -> B -> A` swaps repeatedly, harvesting a small directional bias each round trip until the pool is drained.
+- **FP:** Execution price integrates the actual nonlinear curve (or uses a provably conservative bound), reserve accounting uses the same effective input as pricing, and repeated alternating round trips do not increase attacker value across reachable parameter bounds and realistic reserve states.

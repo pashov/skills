@@ -12,10 +12,14 @@ Extract every relationship that must hold:
 - **State couplings.** When X changes, Y must change too. Find all writers of X and identify which ones forget to update Y.
 - **Capacity constraints.** For every `require(value <= limit)`, find ALL paths that increase `value`. Identify paths that skip the check.
 - **Interface guarantees.** Find where view functions promise values that state-changing functions fail to honor.
+- **Pricing / reserve equivalence.** In swap systems, the effective input used to quote output must match the effective input added to reserves or deducted from inventory.
+- **Round-trip monotonicity.** A bounded alternating round trip (`A -> B -> A`) should not increase attacker value absent explicit rewards.
 
 ## Step 2 — Break each invariant
 
 - **Break round-trips.** Make `deposit(X) → withdraw(all)` return more than X. Test with 1 wei, max uint, first/last deposit.
+- **Break alternating swap cycles.** For custom curves or hooks, test repeated `A -> B -> A` with concrete values. If the loop gains value, identify whether the source is midpoint bias, stale state, or fee/reserve mismatch.
+- **Sweep reachable regimes.** If the invariant break depends on config params or reserve ratios, vary them across reachable bounds instead of checking one default state.
 - **Exploit path divergence.** Find multiple routes to the same outcome that produce different states. Take the profitable path.
 - **Break commutativity.** `A.action → B.action` vs `B.action → A.action` produces different state. Control ordering for MEV extraction.
 - **Abuse boundaries.** Zero balance, max capacity, first/last participant, empty state — find where invariants degenerate.

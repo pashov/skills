@@ -8,6 +8,7 @@ Other agents cover known patterns, arithmetic, permissions, economics, invariant
 
 - **Parameter divergence.** Feed mismatched inputs: claimed amount ≠ actual sent amount, requested token ≠ delivered token. Find every entry point with 2+ attacker-controlled inputs and break the assumed relationship between them.
 - **Value leaks.** Trace every value-moving function from entry to final transfer. Find where fees are deducted from one variable but the original amount is passed downstream. Deposit token A, specify token B in the message, drain the contract's B balance. Forward full `msg.value` after fee subtraction.
+- **Gross / net divergence.** Trace swap inputs across helpers and hooks. If pricing uses a net-after-fee amount but reserve writes, debt accounting, or inventory updates use the gross specified amount, weaponize the mismatch.
 - **Encoding/decoding mismatches.** Exploit `abi.encodePacked` decoded with `abi.decode`, field order mismatches, assembly reading wrong byte counts.
 - **Sentinel bypass.** `address(0)`, `0xEeEe...`, `type(uint256).max`, empty bytes trigger special paths. Find where the special path skips validation the normal path enforces.
 - **Untrusted return values.** Exploit external call return values used without validation. Find where the query function differs from the function used for the actual operation.
@@ -22,6 +23,7 @@ Other agents cover known patterns, arithmetic, permissions, economics, invariant
 - **Mid-operation config mutation.** Fire a setter while an operation is in-flight. Exploit the operation consuming stale or unexpected new values.
 - **Dependency swap.** Swap an external dependency while a callback from the old one is still pending.
 - **Approval residuals.** Exploit leftover allowance when approved amount exceeds consumed amount.
+- **Cross-contract pricing traces.** If a wrapper, hook, or router delegates math to a helper/library, trace the returned price / output value all the way into reserve mutation. Treat helper-returned pricing and core reserve writes as one execution path.
 
 ## Output fields
 
