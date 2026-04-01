@@ -34,6 +34,10 @@ Before Gate 1, discovery must also answer:
 - whether the protocol is a fork / close derivative of a known design and whether known parent-protocol attack classes were checked
 - whether an empty or near-empty market / pool / vault / share system could be bootstrapped into a profitable mispricing state
 - whether Morpho / MetaMorpho / lending-vault specific risk classes were checked: allocator/curator routing, downstream empty markets, oracle/collateral weakness, cap misconfiguration, withdrawal-liquidity starvation, and vault share bootstrap
+- whether a deposit / fee / `netValue` / principal contribution is being counted both as distributable reward and as fully withdrawable principal
+- whether reward payout reduces the same liability bucket from which the reward was derived, or only spends cash while liabilities remain overstated
+- whether two attacker-controlled accounts can cycle deposits, reward accrual, withdrawals, and principal exits to realize the accounting mismatch
+- whether insolvency or low live balance turns an otherwise circular reward model into an immediate public drain
 - for Morpho / MetaMorpho style systems, whether each specific issue family was explicitly considered and either validated or disproven:
   - empty / near-empty downstream market attack
   - bad curation / cap attack
@@ -87,6 +91,7 @@ Prove an unprivileged actor executes the attack.
 - If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
 - If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
 - If a helper/router/vault/distributor performs the real swap or payout, the helper's live balances, approvals, and recipients are part of the same trigger analysis
+- A circular reward model is not “just design” if a public attacker can use temporary capital or multiple addresses to withdraw more cash than the protocol can safely back
 - If the initial effect is griefing, you must still test common profit-conversion pivots before rejecting profitability:
   - attacker-controlled recipient / sink / referrer / helper
   - front-run / back-run
@@ -107,6 +112,19 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
 
 If reserve depth, threshold reachability, and realistic round-trip costs were not checked, attacker profitability is **not confirmed**.
+
+## Gate 3.6 — Reward Solvency Check
+
+For reward-, staking-, dividend-, yield-, referral-, or principal-tracking systems, ask:
+
+- Is newly deposited or newly accrued value counted twice: once as distributable reward and again as fully withdrawable principal / share value?
+- Does `claim`, `withdraw`, `harvest`, `reinvest`, or equivalent reduce the same liability accounting that created the reward?
+- Can an attacker use two or more controlled addresses to seed principal, inflate pending rewards, withdraw reward from one side, and then exit principal from the other?
+- Does the exploit need real external yield, or can it be funded entirely by later deposits, temporary capital, or flash-loaned liquidity?
+- Does the protocol become immediately drainable once cash-on-hand is lower than reported contributed principal / assets / shares / liabilities?
+- Are public variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `shares`, `assets`, `principal`, or equivalent left overstated after cash leaves the contract?
+
+If these questions were not checked, attacker profitability for reward/accounting systems is **not confirmed**.
 
 ## Gate 4 — Impact
 
@@ -142,6 +160,7 @@ Before finalizing leads, promote where warranted:
 - **Threshold-sensitive economics.** If the source trace is complete and the only open question is whether a whale/flashloan can wake a dormant thresholded path, do not reject until that threshold reachability is checked.
 - **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
 - **Fork-sensitive economics.** If the code is a near-fork of a historically exploited design, do not reject the inherited issue class until the source diff proves the critical bootstrap or accounting assumption was actually changed.
+- **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
 
 ## Leads
 

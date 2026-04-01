@@ -107,6 +107,15 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - **Profit conversion attempts**:
        - if the initial issue looks like griefing, list ways it could become profit via front-run/back-run, self-referral, attacker-controlled sink, temporary role capture, flash loan, or purpose-built contract wallet
        - if value is redirected to protocol sinks, test whether attacker can first become or influence that sink
+     - **Reward / solvency accounting pass**:
+       - whether a new deposit, fee, or `netValue` is counted both as immediately distributable reward and as fully withdrawable principal / share value
+       - whether reward accrual increases liabilities without creating segregated backing assets or reserves
+       - whether reward withdrawal reduces the same accounting bucket from which the reward was derived, or only spends cash while leaving liabilities unchanged
+       - whether `claim`, `withdraw`, `reinvest`, `harvest`, or similar flows can realize rewards sourced from later deposits while the depositor's own principal remains fully withdrawable
+       - whether two attacker-controlled accounts can cycle `deposit -> reward accrual -> withdraw -> principal exit` in one transaction or one short sequence
+       - whether insolvency or low cash balance converts a circular reward model into an immediate drain
+       - whether public state variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `principal`, `shares`, `assets`, or similar remain overstated after cash leaves the contract
+       - whether direct ETH/token donations, flash-loaned deposits, or attacker-listed worthless assets make the accounting exploit cheaper without changing permissions
      - **Large Capital / Threshold Pass**:
        - every threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, `claim`, `process`, `autoSwap`, or fee accumulator
        - whether a large trade or flash loan can cross the threshold in one transaction
@@ -244,6 +253,10 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - Does the code rely on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, or `isContract` checks that should be treated as flagged anti-patterns because EIP-7702-style delegated EOAs and account-abstraction flows weaken the intended “EOA-only” guarantee?
    - Does the vulnerable path require owning the token, or can it be reached with flash-loaned assets and a purpose-built contract?
    - Are trusted helper contracts (`MAIN`, `STAKE`, `PROOF`, distributor, vault, etc.) part of the same exploit surface because the target contract calls them during the attack?
+   - Is newly deposited value being used twice: once as withdrawable principal and again as distributable reward or yield?
+   - Does reward payout reduce the protocol's liability accounting, or only its cash balance?
+   - Can two attacker-controlled accounts manufacture claimable rewards for one another from temporary capital and then withdraw both reward and principal?
+   - If the system looks circular, did you test whether insolvency or low live balance turns it into an immediate profitable drain rather than a vague design smell?
 
    **Protocol audit minimum checks:** when the user asks to audit a protocol, docs-listed contracts, or a contract set, you must:
    - map user-facing docs/contracts to the actual live deployed contracts
