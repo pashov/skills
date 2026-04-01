@@ -89,9 +89,15 @@ _Vulnerability trails with concrete code smells where the full exploit path coul
 
 ---
 
+## Attacker Profitability Conclusion
+
+- **Conclusion**: Yes / No / Inconclusive
+- **Basis**: <1-2 sentences stating whether a non-owner / unprivileged attacker has a confirmed profitable path, and cite finding numbers or lead titles as support>
+
+---
+
 > ⚠️ This review was performed by an AI assistant. AI analysis can never verify the complete absence of vulnerabilities and no guarantee of security is given. Team security reviews, bug bounty programs, and on-chain monitoring are strongly recommended. For a consultation regarding your projects' security, visit [https://www.pashov.com](https://www.pashov.com)
 
 ````
 
-**Rules:** Follow the template above exactly. Sort findings by confidence (highest first). Findings below the threshold get a description but no **Fix** block. Draft findings directly in report format — do not re-generate.
-
+**Rules:** Follow the template above exactly. Sort findings by confidence (highest first). Findings below the threshold get a description but no **Fix** block. The attacker profitability conclusion must be present and must address unprivileged attacker profit specifically, not generic risk. Draft findings directly in report format — do not re-generate.

@@ -12,6 +12,8 @@ Other agents cover known patterns, logic/state, access control, and arithmetic. 
 
 **Extract value atomically.** Construct deposit→manipulate→withdraw in a single tx. Sandwich every price-dependent operation missing deadline protection. Push fee formulas to zero (free extraction) and max (overflow). Find the cheapest griefing vector that blocks other users.
 
+**Sweep reachable economics.** If profitability depends on curve params, fee params, or reserve ratios, search the reachable configuration space and repeated-iteration counts. Do not stop at one default-parameter simulation.
+
 **Break ERC compliance.** For every ERC the contract claims to implement (ERC-4626, ERC-20, ERC-2612):
 - Call the operation at the reported `max*` value — make it revert to prove the guarantee is broken.
 - Find where the query function differs from the execution function (`maxDeposit` vs actual `mint` limits).

@@ -23,6 +23,7 @@ For every state-changing function:
 - **Boundary abuse.** Zero, max, first call, last item, empty array, supply of 1 — find where the code degenerates.
 - **Cross-function breaks.** Function A leaves state in configuration X. Find where function B mishandles X.
 - **Assumption chains.** A assumes B validates. B assumes A pre-validated. Neither checks — exploit the gap.
+- **Default-state trap.** If the code exposes configurable parameters, do not assume the default state is the only reachable state. Break the assumption that “default sample is representative.”
 
 Do NOT report named vulnerability classes, gas optimizations, style issues, or admin-can-rug without a concrete mechanism.
 

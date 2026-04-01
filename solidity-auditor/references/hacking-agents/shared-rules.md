@@ -7,11 +7,15 @@ Your bundle has two sections:
 1. **Core source** (inline) — read in parallel chunks (offset + limit), compute offsets from the line count in your prompt.
 2. **Peripheral file manifest** — file paths under `# Peripheral Files (read on demand)`. Read only those relevant to your specialty.
 
+If the target contract delegates pricing, reserve accounting, or oracle logic to a helper / hook / library / sibling module, those files are mandatory reading, not optional periphery. A wrapper-only read is an audit failure.
+
 When matching function names, check both `functionName` and `_functionName` (Solidity convention).
 
 ## Cross-contract patterns
 
 When you find a bug in one contract, **weaponize that pattern across every other contract in the bundle.** Search by function name AND by code pattern. Finding native/ERC20 confusion in `ContractA.onRevert` means you check every other contract's `onRevert` — missing a repeat instance is an audit failure.
+
+For pricing systems, search across contract boundaries: helper returns, hook callbacks, library math, and reserve/state writers are one exploit surface. If a wrapper uses `getAmountOut`, `getUnspecifiedAmount`, custom `price`, `ln`, `pow`, or direct reserve writes, inspect every defining file before deciding there is no bug.
 
 After scanning: escalate every finding to its worst exploitable variant (DoS may hide fund theft). Then revisit every function where you found something and attack the other branches.
 
