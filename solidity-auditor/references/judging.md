@@ -61,6 +61,7 @@ Prove the vulnerable state exists in a live deployment.
 - Structurally impossible (enforced invariant prevents it) → **REJECTED**
 - Requires privileged actions outside normal operation → **DEMOTE**
 - Cross-contract helper / hook / library logic that the target contract actually calls is the same exploit surface, not an optional dependency review
+- If execution price, reserve updates, or invariant enforcement are delegated, those delegated files are the critical path even when the named wrapper looks safe in isolation
 - If the exploit depends on configurable parameters or reserve ratios, test reachable defaults, allowed config bounds, and normal reserve skews before rejecting
 - If the system is a fork of a known protocol, do not reject inherited issue classes until the source diff proves the critical invariant changed
 - For live audits, verify the actual onchain config values before treating a code bug as active
@@ -81,6 +82,7 @@ Prove an unprivileged actor executes the attack.
 - If the value is redirected to protocol treasury / feeRecipient / owner rather than the caller, this is **not** outsider profit unless attacker control or collusion is proven
 - Costs exceed extraction → **REJECTED** only after evaluating realistic repeated execution and compounding, not just a single iteration
 - A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
+- A single harmless sample does **not** refute approximation bias, midpoint/average pricing, or micro-edge compounding on a nonlinear curve; repeated iterations and callback-loop execution must be checked
 - Unprivileged actor triggers profitably → **clears**, continue
 - If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
 - If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
@@ -98,6 +100,9 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - What are the live reserves and balances?
 - How large is the forced move relative to those reserves?
 - What are the round-trip costs from swap fees, token taxes, slippage, and price impact?
+- Does the edge only become positive after repeated iterations rather than a single round trip?
+- Is the pricing function exact, or is it a midpoint / average / interpolated / cached approximation of a nonlinear curve?
+- Do reserve updates use gross input while output pricing uses net-after-fee input, or any other mismatched effective amount?
 - Is the path dead, dormant, or immediately live?
 - Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
 
@@ -135,6 +140,7 @@ Before finalizing leads, promote where warranted:
 - **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, description only.
 - **Parameter-sensitive economics.** If the source trace is complete and the only open question is which reachable configuration or reserve regime turns it profitable, do not reject on one default sample. Demote to LEAD only after searching the reachable parameter space.
 - **Threshold-sensitive economics.** If the source trace is complete and the only open question is whether a whale/flashloan can wake a dormant thresholded path, do not reject until that threshold reachability is checked.
+- **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
 - **Fork-sensitive economics.** If the code is a near-fork of a historically exploited design, do not reject the inherited issue class until the source diff proves the critical bootstrap or accounting assumption was actually changed.
 
 ## Leads
@@ -166,12 +172,3 @@ Also explicitly distinguish:
 ## Do Not Report
 
 Linter/compiler issues, gas micro-opts, naming, NatSpec. Admin privileges by design. Missing events. Centralization without exploit path. Implausible preconditions (but fee-on-transfer, rebasing, blacklisting ARE plausible for contracts accepting arbitrary tokens).
-
-## Exploit-Tx Priority
-
-If the user provides a concrete exploit transaction, treat that transaction as a first-class validation artifact:
-
-- Reconstruct the observed path from the receipt and map it back to local source
-- Prefer the observed exploit path over cleaner speculative theories
-- If the exploit used a helper contract, flash loan, payable entrypoint, or claim path, do not downgrade the issue just because the wrapper token path looked restricted
-- If the exploit depends on a large trade, threshold crossing, or reserve manipulation, do not mark it profitable until reserve depth and round-trip economics were checked on realistic live state

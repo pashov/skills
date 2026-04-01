@@ -44,6 +44,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - sibling files whose names match `*Hook*`, `*Helper*`, `*Oracle*`, `*Curve*`, `*Math*`, `*Quoter*`, `*Pricing*`
      - files defining or mutating symbols matched by `getAmountOut`, `getUnspecifiedAmount`, `price`, `reserve`, `sync`, `ln`, `exp`, `pow`, `curve`, `oracle`, or fee-adjusted amount variables
    - If the requested contract delegates pricing or reserve accounting, the helper/hook/library files are **in scope** even if the user named only the wrapper.
+   - If execution price, reserve mutation, fee application, or invariant enforcement is split across wrapper + hook + helper + math library files, that split path is **critical path** and must be treated as the primary exploit surface, not optional supporting context.
    - If the requested contract or a coupled file uses `receive()`, `fallback()`, `tx.origin`, contract/EOA checks, or reward/claim side effects, those contracts are **in scope** even if they look like periphery.
    - If the codebase is a fork or near-fork of a known protocol, import-paths, naming, storage layout, comments, and copied function signatures must be used to identify the parent protocol lineage. Once lineage is identified, inherited issue classes from that parent protocol and its common forks are **in scope by default** unless clearly removed by source changes.
 
@@ -138,12 +139,19 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - where reserves / pool state are updated
      - where fees are applied
      - whether pricing uses gross input, net-after-fee input, or a different effective amount than reserve accounting
+     - whether execution relies on an approximation, interpolation, midpoint, averaging rule, or cached quote instead of an exact integral / exact invariant solve
+     - which file contains the real pricing math versus which file only wraps it
    - Explicitly test and note:
      - round-trip profitability under repeated alternation (`A -> B -> A`)
      - midpoint / average pricing on nonlinear curves
      - reserve updates using gross input while output pricing uses net-after-fee input
      - helper-contract math called by the hook/core but not defined there
+     - repeated alternating swaps over many iterations, not just one sample round trip
+     - whether a tiny directional bias compounds inside a callback, unlock, multicall, or router-driven loop
+     - whether one swap direction gets consistently better pricing and the reverse leg does not fully cancel the edge
+     - whether the approximated execution price differs from the true curve integral or exact invariant solution
    - When a wrapper delegates the real pricing logic, the checklist must name both the wrapper and the delegated files.
+   - For any custom curve or nonlinear helper-priced system, one agent must explicitly search for profit from repeated alternating swaps and compounding micro-edges rather than only one-shot drains.
    - Also explicitly record:
      - every payable `receive()` / `fallback()` / zero-calldata entrypoint
      - every path that reaches reward minting, claiming, mining, withdrawal, or pool updates without going through `_transfer`
@@ -214,8 +222,11 @@ You must include at least one non-standard / unusual exploit attempt from the di
 
    **Pricing-system minimum checks:** for any finding touching swap math, hooks, or reserves, the validation pass must explicitly answer:
    - Does any repeated alternating round-trip (`A -> B -> A`) increase attacker value?
+   - Does profit appear only after many repeated iterations even if one sample round trip looks neutral or slightly loss-making?
    - Do pricing and reserve accounting consume the same effective input amount?
    - Is the real attack surface split across wrapper + helper/hook/library files?
+   - Is execution price derived from an approximation (midpoint, average, interpolation, linearization, cached quote) rather than the exact curve / invariant?
+   - If the curve is nonlinear, did you compare the implementation against the exact integral / invariant instead of assuming the approximation is close enough?
    - If profitability depends on parameters or reserve ratios, did you test defaults, allowed configuration bounds, and realistic reserve skews rather than one default sample?
    - If profitability depends on a threshold or dormant path, did you test whether a whale or flashloan can cross it in one transaction?
    - Did you compare the forced move size against live reserves and realistic execution costs?
@@ -226,7 +237,6 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - Does the code rely on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, or `isContract` checks that should be treated as flagged anti-patterns because EIP-7702-style delegated EOAs and account-abstraction flows weaken the intended “EOA-only” guarantee?
    - Does the vulnerable path require owning the token, or can it be reached with flash-loaned assets and a purpose-built contract?
    - Are trusted helper contracts (`MAIN`, `STAKE`, `PROOF`, distributor, vault, etc.) part of the same exploit surface because the target contract calls them during the attack?
-   - If the user supplied a concrete exploit transaction, did you trace that transaction against the local source and prefer the observed exploit path over a cleaner but incomplete theory?
 
    **Protocol audit minimum checks:** when the user asks to audit a protocol, docs-listed contracts, or a contract set, you must:
    - map user-facing docs/contracts to the actual live deployed contracts
@@ -250,7 +260,7 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - `Dormant`: inactive now, but reachable if a user/whale/flashloan crosses a threshold
    Do not clear an issue merely because the path is currently inactive if it is only dormant.
 
-   **Do not refute parameter-sensitive pricing bugs with one sample.** If the source trace shows midpoint bias, nonlinear-curve approximation, or gross/net accounting mismatch, a single loss-making simulation at default parameters is not enough to reject. Search reachable configuration ranges, reserve ratios, and repeated iteration counts before clearing the finding.
+   **Do not refute parameter-sensitive pricing bugs with one sample.** If the source trace shows midpoint bias, nonlinear-curve approximation, gross/net accounting mismatch, or repeated-loop compounding potential, a single loss-making simulation at default parameters is not enough to reject. Search reachable configuration ranges, reserve ratios, repeated iteration counts, and callback/multicall loop structures before clearing the finding.
 
 3. **Lead promotion & rejection guardrails.**
    - Promote LEAD → FINDING (confidence 75) if: complete exploit chain traced in source, OR `[agents: 2+]` demoted (not rejected) the same issue.
