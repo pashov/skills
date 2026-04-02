@@ -96,6 +96,12 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether that rewrite can temporarily reclassify locked or unsellable assets into the priced / sellable reserve used by mint, burn, swap, redeem, or withdrawal math
        - whether a later function restores accounting only after the pricing or payout step has already consumed the corrupted reserve state
        - whether a profitable loop exists of the form `mint/buy -> sync/update -> burn/sell -> repeat`
+     - **LP reserve destruction / pair-burn checks**:
+       - whether any public transfer hook, sell hook, pending-burn variable, fee bucket, or maintenance path can burn tokens directly from the LP/pair address
+       - whether the amount burned from the pair is fed by public user flow such as sells, transfers, or swaps rather than privileged-only admin calls
+       - whether the contract calls `sync()` after burning pair inventory, making the reserve distortion immediately exploitable
+       - whether a profitable loop exists of the form `buy -> trigger sell/transfer hook -> accumulate pair-burn debt -> burn pair balance -> sync -> extract opposite reserve`
+       - whether the code destroys the token-side reserve of the pair without correspondingly removing the quote-side reserve, making the opposite asset drainable
      - **Morpho / MetaMorpho / lending-vault checks**:
        - whether the vault or wrapper allocates into underlying markets that can be empty or near-empty
        - whether allocator / curator / owner can route funds into risky long-tail markets before users can react
@@ -134,6 +140,12 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether insolvency or low cash balance converts a circular reward model into an immediate drain
        - whether public state variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `principal`, `shares`, `assets`, or similar remain overstated after cash leaves the contract
        - whether direct ETH/token donations, flash-loaned deposits, or attacker-listed worthless assets make the accounting exploit cheaper without changing permissions
+     - **One-time claim / invalidation pass**:
+       - whether a completed `claim`, `withdraw`, `redeem`, `unlock`, `cancel`, `collect`, or `settle` path invalidates the primary storage record, not just an auxiliary index/list/lookup helper
+       - whether the authorization check reads from the same primary record that settlement clears
+       - whether cleanup only removes an entry from an owner array, enumerable set, queue, bitmap, or helper mapping while the source-of-truth record still authorizes payout
+       - whether the same record can be claimed, withdrawn, redeemed, or unlocked twice in the same transaction or across transactions
+       - whether user-controlled zero-duration / immediate-maturity / fully-finished states let the attacker test repeat-withdraw immediately
      - **Value-moving state delta pass**:
        - for every `mint`, `redeem`, `redeemUnderlying`, `withdraw`, `deposit`, `borrow`, `repay`, `liquidate`, `claim`, `burn`, `seize`, or share-conversion path, compare:
          - user balance delta
@@ -150,6 +162,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - dust mint then oversized redeem
          - dust collateral then max borrow
          - full-cash redeem / withdraw
+         - full claim / withdraw / unlock then repeat the same call on the same id
          - `type(uint256).max` / sentinel-value branches
          - first-user / tiny-supply / tiny-share states
        - explicitly test transient-state variants:
@@ -168,6 +181,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - rough output of any forced swap, rebalance, dispatch, liquidation, or dump at live reserves
        - rough round-trip cost from token taxes, AMM fees, slippage, and price impact
        - whether the move is large enough to matter economically
+       - whether pair-side token destruction plus `sync()` can collapse one reserve enough to extract the opposite reserve after realistic flashloan and trade costs
      - **Helper Economic Pass**:
        - helper/router/distributor/vault approvals
        - helper balances and recipients

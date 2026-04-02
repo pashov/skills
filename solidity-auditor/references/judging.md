@@ -162,6 +162,18 @@ For reserve-priced mint/burn/swap/treasury systems, ask:
 
 If these questions were not checked, attacker profitability for bucketed-reserve systems is **not confirmed**.
 
+## Gate 3.58 — LP Reserve Destruction Check
+
+For token / AMM systems that can touch pair balances, ask:
+
+- Can any public sell hook, transfer hook, pending-burn bucket, fee bucket, or maintenance path burn or otherwise destroy tokens directly from the LP/pair address?
+- Is that pair-side destruction fed by public user actions rather than only privileged admin calls?
+- Does the contract call `sync()` after pair-side destruction, making the reserve skew immediately tradable?
+- Can an attacker loop `buy -> trigger sell/transfer hook -> accumulate pair-burn debt -> burn pair reserve -> sync -> extract opposite reserve`?
+- After realistic flashloan size, taxes, fees, and slippage, does collapsing the token-side reserve leave the opposite reserve profitably drainable?
+
+If these questions were not checked, attacker profitability for pair-burn / LP-reserve-destruction systems is **not confirmed**.
+
 ## Gate 3.6 — Reward Solvency Check
 
 For reward-, staking-, dividend-, yield-, referral-, or principal-tracking systems, ask:
@@ -184,6 +196,8 @@ For mint/redeem/borrow/repay/liquidate/claim/withdraw/share-conversion systems, 
 - Are clamps, caps, sentinel values, dust handling, or balance checks applied before both global and per-user mutations, rather than after one side has already changed?
 - Can a dust position trigger a large quoted transfer while only a tiny user balance is burned or locked?
 - Does any path reduce `totalSupply`, `totalBorrows`, `totalAssets`, `shares`, or similar global values by a larger amount than is actually removed from the attacker account?
+- After a full `claim`, `withdraw`, `redeem`, `unlock`, `cancel`, `collect`, or `settle`, is the primary source-of-truth record actually invalidated rather than only an auxiliary index/list/lookup helper?
+- Can the same id / record be used twice because the payout authorization still reads from an uncleared primary record?
 
 If these questions were not checked, attacker profitability for value-moving accounting systems is **not confirmed**.
 
@@ -224,8 +238,10 @@ Before finalizing leads, promote where warranted:
 - **Reserve-index economics.** If the source trace shows dust-liquidity denominators feeding public index updates and later scaled-balance valuation, do not demote it to “empty-market smell” until repeated flashloan/fee compounding and post-index rounding have been checked.
 - **Donation-inflation economics.** If the source trace shows direct underlying donations can raise exchange rate or collateral value for an unchanged share balance, do not demote it to “design” or “non-empty market” until pre-existing-holder, recursive-borrow, and post-liquidation bad-debt variants have been checked.
 - **Transient reserve economics.** If the source trace shows a public sync/update path can temporarily reclassify locked or unsellable funds into the priced reserve, do not demote it to “eventual consistency” until a same-tx `sync -> burn/sell/redeem` extraction loop has been checked.
+- **Pair-burn economics.** If the source trace shows public user flow feeds a pending burn bucket or other path that can burn LP/pair inventory and then `sync()`, do not demote it to “tokenomics” until `buy -> hook -> pair-burn -> sync -> opposite-reserve extraction` has been checked.
 - **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
 - **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
+- **One-time-claim economics.** If the source trace shows settlement clears only an owner index / helper list / enumerable set while the primary record still authorizes payout, do not demote it to “bookkeeping” until same-id repeat-claim / repeat-withdraw has been checked.
 
 ## Leads
 
