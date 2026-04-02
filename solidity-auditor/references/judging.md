@@ -33,6 +33,11 @@ Before Gate 1, discovery must also answer:
 - whether live reserves, balances, and taxes make the path economically meaningful rather than merely reachable
 - whether the protocol is a fork / close derivative of a known design and whether known parent-protocol attack classes were checked
 - whether an empty or near-empty market / pool / vault / share system could be bootstrapped into a profitable mispricing state
+- whether a Compound/Venus-style market lets a pre-existing share holder donate underlying directly to the market, keep the same share count, and still gain borrow power through a higher exchange rate
+- whether an empty or near-empty reserve could amplify `liquidityIndex`, `variableBorrowIndex`, normalized income, or any other accumulator used later in scaled-balance accounting
+- whether public flashloan premiums, fee updates, or reserve-update paths can be looped repeatedly against a dust denominator
+- whether the protocol separates priced reserve, locked reserve, treasury reserve, raw balance, or other reserve buckets, and whether a public path can reclassify one bucket into another
+- whether any public sync/reconcile/update function can transiently make pricing or payout logic read from the wrong reserve bucket
 - whether Morpho / MetaMorpho / lending-vault specific risk classes were checked: allocator/curator routing, downstream empty markets, oracle/collateral weakness, cap misconfiguration, withdrawal-liquidity starvation, and vault share bootstrap
 - whether a deposit / fee / `netValue` / principal contribution is being counted both as distributable reward and as fully withdrawable principal
 - whether reward payout reduces the same liability bucket from which the reward was derived, or only spends cash while liabilities remain overstated
@@ -81,6 +86,9 @@ Prove the vulnerable state exists in a live deployment.
 - Unusual but legal call ordering, first-write-wins poisoning, direct helper entry, and purpose-built exploit wallets are normal reachable behavior when public functions permit them
 - EOA-only assumptions are not enough to demote reachability when delegated-EOA or account-abstraction semantics could exercise the same public path
 - Empty-market / first-depositor / share-inflation / donation-boosted bootstrap states are normal reachable behavior if the protocol can launch or interact while depth is near zero
+- Direct underlying donation into a collateral market is normal reachable behavior if the market contract can receive the token and exchange-rate logic reads raw balance without minting offsetting shares
+- Reserve-index amplification on dust liquidity is normal reachable behavior if public actions can both shrink reserve liquidity and later update the index through flashloans, fees, or repayments
+- Transient reserve-bucket corruption is normal reachable behavior if a public sync/update path can be called immediately before a burn/sell/redeem step, even if final storage is restored later in the same transaction
 - Allocator / curator / cap / withdrawal-queue states are normal reachable behavior in Morpho/MetaMorpho-style vaults and must be checked before rejecting those issue classes
 - When a system is a close fork of a historically exploited lending/vault design, unchanged critical assumptions should be presumed inherited until the source diff proves otherwise
 
@@ -118,6 +126,41 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
 
 If reserve depth, threshold reachability, and realistic round-trip costs were not checked, attacker profitability is **not confirmed**.
+
+## Gate 3.55 — Reserve Index Check
+
+For Aave-style or scaled-balance lending markets, ask:
+
+- Can a public actor first reduce reserve liquidity to dust or near dust?
+- Does any public flashloan, fee, repay, or reserve-update path increase `liquidityIndex`, `variableBorrowIndex`, normalized income, or a related accumulator using that dust liquidity as denominator?
+- Can repeated self-flashloans or fee-generating loops compound the index materially?
+- After index manipulation, do scaled mint/burn/balance conversions round in a way that lets tiny deposits or balances support larger withdrawals, collateral value, or borrow power?
+- Does the exploit require only public lending-core paths, even if wrappers/periphery look unrelated?
+
+If these questions were not checked, attacker profitability for Aave-style reserve systems is **not confirmed**.
+
+## Gate 3.56 — Compound / Venus Donation Check
+
+For Compound-style or exchange-rate-backed lending markets, ask:
+
+- Can a user with a pre-existing cToken/vToken balance donate underlying directly to the market without minting new shares?
+- Does `exchangeRateStored`, `exchangeRateStoredInternal`, `getCash`, or equivalent reserve-backed accounting treat that donation as additional backing for all existing shares?
+- Do liquidity / borrow checks then multiply the unchanged share balance by the inflated exchange rate, oracle price, and collateral factor to create new borrow capacity?
+- Can the attacker loop `borrow -> swap -> donate underlying -> borrow again` until shortfall or bad debt appears?
+- Does the exploit work only in an empty market, or also in a non-empty market with a sufficiently large direct donation?
+
+If these questions were not checked, attacker profitability for Compound/Venus-style collateral markets is **not confirmed**.
+
+## Gate 3.57 — Reserve Bucket Check
+
+For reserve-priced mint/burn/swap/treasury systems, ask:
+
+- Does the protocol distinguish between priced reserve, locked reserve, treasury reserve, claimable reserve, and raw balance?
+- Can any public `sync`, `reconcile`, `refresh`, `skim`, `settle`, or selector-level function rewrite priced reserve from raw balance without excluding locked funds?
+- Can a user call that function and then immediately invoke burn/sell/redeem/withdraw logic before the protocol restores canonical accounting?
+- Is the exploit profitable even if the final end-of-tx state looks consistent again?
+
+If these questions were not checked, attacker profitability for bucketed-reserve systems is **not confirmed**.
 
 ## Gate 3.6 — Reward Solvency Check
 
@@ -178,6 +221,9 @@ Before finalizing leads, promote where warranted:
 - **Threshold-sensitive economics.** If the source trace is complete and the only open question is whether a whale/flashloan can wake a dormant thresholded path, do not reject until that threshold reachability is checked.
 - **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
 - **Fork-sensitive economics.** If the code is a near-fork of a historically exploited design, do not reject the inherited issue class until the source diff proves the critical bootstrap or accounting assumption was actually changed.
+- **Reserve-index economics.** If the source trace shows dust-liquidity denominators feeding public index updates and later scaled-balance valuation, do not demote it to “empty-market smell” until repeated flashloan/fee compounding and post-index rounding have been checked.
+- **Donation-inflation economics.** If the source trace shows direct underlying donations can raise exchange rate or collateral value for an unchanged share balance, do not demote it to “design” or “non-empty market” until pre-existing-holder, recursive-borrow, and post-liquidation bad-debt variants have been checked.
+- **Transient reserve economics.** If the source trace shows a public sync/update path can temporarily reclassify locked or unsellable funds into the priced reserve, do not demote it to “eventual consistency” until a same-tx `sync -> burn/sell/redeem` extraction loop has been checked.
 - **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
 - **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
 

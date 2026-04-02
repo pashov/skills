@@ -85,6 +85,17 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether donations, direct transfers, forced reserves, or manipulative bootstrap deposits can distort the initial exchange rate or collateral factor
        - whether an empty or near-empty market can be used as collateral, debt asset, liquidation target, or pricing reference before it has meaningful depth
        - whether a fork inherited known empty-pool / empty-market / first-depositor / share-inflation attacks from its parent protocol
+       - whether low-liquidity reserves can amplify any reserve index, accumulator, or fee-distribution variable because the denominator collapses to dust
+       - whether public flashloan premiums, fee accrual, or reserve updates can be compounded repeatedly against dust liquidity
+       - whether Aave-style `liquidityIndex`, `variableBorrowIndex`, normalized income, or scaled-balance accounting can be manipulated by first pushing reserve liquidity near zero
+       - whether scaled mint/burn/withdraw/borrow paths round against attacker-amplified indices in a way that lets tiny deposits or scaled balances support larger withdrawals or borrow power
+       - whether a fork inherited Aave-style reserve-index inflation or flashloan-premium amplification issues even if wrapper/periphery diffs look unrelated
+     - **Reserve bucket / sync checks**:
+       - whether the protocol tracks more than one balance bucket such as priced reserve, locked reserve, claimable reserve, treasury reserve, or raw contract balance
+       - whether any public `sync`, `reconcile`, `refresh`, `skim`, `settle`, `updatePoolBalance`, or unlabeled selector-style function rewrites one reserve bucket from raw `address(this).balance` or token balance
+       - whether that rewrite can temporarily reclassify locked or unsellable assets into the priced / sellable reserve used by mint, burn, swap, redeem, or withdrawal math
+       - whether a later function restores accounting only after the pricing or payout step has already consumed the corrupted reserve state
+       - whether a profitable loop exists of the form `mint/buy -> sync/update -> burn/sell -> repeat`
      - **Morpho / MetaMorpho / lending-vault checks**:
        - whether the vault or wrapper allocates into underlying markets that can be empty or near-empty
        - whether allocator / curator / owner can route funds into risky long-tail markets before users can react
@@ -104,6 +115,13 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - which role or config must enable it
          - whether it needs a flash loan / large capital / first depositor / direct donation
          - whether the victim is the vault, downstream market, withdrawer set, or vault share holders
+     - **Compound / Venus donation-inflation checks**:
+       - whether a pre-existing cToken / vToken holder can increase borrow power by donating underlying directly to the market contract without minting new shares
+       - whether `exchangeRateStored`, `exchangeRateStoredInternal`, `getCash`, `cashPlusBorrowsMinusReserves`, or similar logic reads raw underlying balance in a way that treats unsolicited donations as backing
+       - whether liquidity / borrow checks multiply an unchanged share balance by the inflated exchange rate, oracle price, and collateral factor to create new borrow capacity
+       - whether the exploit needs an empty market, or only a pre-existing share position plus a large enough direct donation
+       - whether recursive `borrow -> swap -> donate underlying -> borrow again` loops can ratchet collateral value upward until shortfall or bad debt appears
+       - whether direct donations mint offsetting collateral shares; if not, treat unchanged share count with increased borrow power as a first-class exploit path
      - **Profit conversion attempts**:
        - if the initial issue looks like griefing, list ways it could become profit via front-run/back-run, self-referral, attacker-controlled sink, temporary role capture, flash loan, or purpose-built contract wallet
        - if value is redirected to protocol sinks, test whether attacker can first become or influence that sink
@@ -134,6 +152,10 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - full-cash redeem / withdraw
          - `type(uint256).max` / sentinel-value branches
          - first-user / tiny-supply / tiny-share states
+       - explicitly test transient-state variants:
+         - mutate reserve/accounting state with a public sync/update function
+         - immediately consume that mutated state in the next pricing / withdrawal / burn step
+         - verify whether final state appears restored even though value was extracted during the intermediate bad state
        - for forked lending or vault systems, do not assume “standard Compound/Aave/ERC4626 logic” is safe; prove the local state-delta invariant on the actual modified code
      - **Large Capital / Threshold Pass**:
        - every threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, `claim`, `process`, `autoSwap`, or fee accumulator
@@ -192,9 +214,50 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether a “non-transferable” or “wallet-only” token still exposes contract-triggerable reward, deposit, or claim surfaces through helper contracts
      - whether a dormant feature can become active only after a threshold-crossing whale or flashloan trade
      - whether an empty or near-empty market, vault, or share system can be inflated, donated-to, or otherwise bootstrapped into a mispriced state before normal liquidity arrives
+     - whether an empty or near-empty reserve can amplify `liquidityIndex`, `borrowIndex`, normalized income, or any accumulator later used in scaled-balance math
+     - whether public flashloans or fee repayment paths can be looped repeatedly to compound those indices
+     - whether a public sync/reconcile path can transiently make pricing read from the wrong reserve bucket even if storage is restored later in the same transaction
 
-4. `{bundle_dir}/source.md` — a short `# Audit Scope` section listing the expanded source set, then a `# Discovery Checklist` section, then a `# Pricing / Invariant Hotspots` section capturing the checklist above, then ALL expanded in-scope `.sol` files, each with a `### path` header and fenced code block.
-5. Agent bundles = `source.md` + agent-specific files:
+4. **Reserve-index hotspot checklist is mandatory for lending markets.**
+   - Before clearing any Aave-style or scaled-balance lending system, identify and record:
+     - where reserve indices (`liquidityIndex`, `variableBorrowIndex`, normalized income, normalized debt) are updated
+     - the exact denominator used in those updates
+     - whether public actions can shrink that denominator to dust
+     - whether public flashloan, fee, repay, or reserve-update paths can increase the index
+     - where scaled mint/burn/balance conversions divide by the manipulated index and where later valuation multiplies by it
+   - Explicitly test and note:
+     - dust supply / dust reserve state before index update
+     - repeated self-flashloans or fee-generating loops
+     - whether the same actor can first inflate the index and then exploit scaled-balance rounding in deposit/withdraw/borrow paths
+     - whether collateral value or borrow power becomes larger than economically supplied capital after index manipulation
+   - Treat this as a required inherited issue class for Aave/L2Pool/AToken-style forks, not an optional edge case.
+
+5. **Compound / Venus donation-inflation checklist is mandatory for lending forks that price collateral through share balance × exchange rate.**
+   - Identify every market where collateral value depends on `share balance * exchange rate * price * collateral factor`.
+   - Identify whether direct underlying transfers to the market contract increase `getCash`, exchange rate, or equivalent reserve-backed share price without minting new shares.
+   - Explicitly test the pre-existing-holder path:
+     - attacker starts with a positive share balance
+     - attacker donates underlying directly to the market
+     - attacker share count stays unchanged
+     - exchange rate rises
+     - borrow power rises
+   - Test both empty-market and non-empty-market variants. Do not assume this issue requires a fresh market if a large direct donation can still reprice existing shares.
+   - Test recursive loops such as `borrow -> swap -> donate to collateral market -> borrow again`.
+   - Record whether bad debt remains after liquidation or only appears transiently during the loop.
+
+6. **Transient reserve-desync checklist is mandatory for reserve-priced systems.**
+   - Before clearing any reserve-priced bonding-curve, AMM-like, mint/burn, or legacy treasury system, identify and record:
+     - the storage variables that represent priced reserve versus locked / unsellable / treasury reserve
+     - every public function or selector that mutates those variables
+     - whether any path derives priced reserve from raw contract balance without subtracting locked funds
+     - whether mint/burn/sell/buy logic reads those buckets before they are recomputed canonically
+   - Explicitly test and note:
+     - public `sync/update -> sell/burn` in the same transaction
+     - repeated `mint/buy -> sync/update -> burn/sell -> repeat`
+     - whether final end-of-tx storage looks consistent even though the intermediate pricing state was corrupted
+   - Treat “restored by end of tx” as irrelevant if value can be extracted during the temporary bad state.
+7. `{bundle_dir}/source.md` — a short `# Audit Scope` section listing the expanded source set, then a `# Discovery Checklist` section, then a `# Pricing / Invariant Hotspots` section capturing the checklist above, then ALL expanded in-scope `.sol` files, each with a `### path` header and fenced code block.
+8. Agent bundles = `source.md` + agent-specific files:
 
 | Bundle               | Appended files (relative to `{resolved_path}`)                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
