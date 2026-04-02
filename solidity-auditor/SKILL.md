@@ -132,14 +132,18 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - if the initial issue looks like griefing, list ways it could become profit via front-run/back-run, self-referral, attacker-controlled sink, temporary role capture, flash loan, or purpose-built contract wallet
        - if value is redirected to protocol sinks, test whether attacker can first become or influence that sink
      - **Reward / solvency accounting pass**:
-       - whether a new deposit, fee, or `netValue` is counted both as immediately distributable reward and as fully withdrawable principal / share value
-       - whether reward accrual increases liabilities without creating segregated backing assets or reserves
-       - whether reward withdrawal reduces the same accounting bucket from which the reward was derived, or only spends cash while leaving liabilities unchanged
-       - whether `claim`, `withdraw`, `reinvest`, `harvest`, or similar flows can realize rewards sourced from later deposits while the depositor's own principal remains fully withdrawable
-       - whether two attacker-controlled accounts can cycle `deposit -> reward accrual -> withdraw -> principal exit` in one transaction or one short sequence
-       - whether insolvency or low cash balance converts a circular reward model into an immediate drain
-       - whether public state variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `principal`, `shares`, `assets`, or similar remain overstated after cash leaves the contract
-       - whether direct ETH/token donations, flash-loaned deposits, or attacker-listed worthless assets make the accounting exploit cheaper without changing permissions
+        - whether a new deposit, fee, or `netValue` is counted both as immediately distributable reward and as fully withdrawable principal / share value
+        - whether reward accrual increases liabilities without creating segregated backing assets or reserves
+        - whether reward withdrawal reduces the same accounting bucket from which the reward was derived, or only spends cash while leaving liabilities unchanged
+        - whether `claim`, `withdraw`, `reinvest`, `harvest`, or similar flows can realize rewards sourced from later deposits while the depositor's own principal remains fully withdrawable
+        - whether two attacker-controlled accounts can cycle `deposit -> reward accrual -> withdraw -> principal exit` in one transaction or one short sequence
+        - whether insolvency or low cash balance converts a circular reward model into an immediate drain
+        - whether public state variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `principal`, `shares`, `assets`, or similar remain overstated after cash leaves the contract
+        - whether direct ETH/token donations, flash-loaned deposits, or attacker-listed worthless assets make the accounting exploit cheaper without changing permissions
+        - whether qualification thresholds use properly scaled token units (for example `1000 * 1e18` for an 18-decimal stablecoin) rather than raw literals like `1000`
+        - whether a one-time reward / pool / rank / bonus latch is checked but never consumed after payout
+        - whether many cheap helper accounts can repeatedly satisfy the same threshold and mint treasury-backed rewards for one referrer
+        - whether synthetic `availableReward` / `pendingReward` balances can be turned into real treasury outflows through a public claim function
      - **One-time claim / invalidation pass**:
        - whether a completed `claim`, `withdraw`, `redeem`, `unlock`, `cancel`, `collect`, or `settle` path invalidates the primary storage record, not just an auxiliary index/list/lookup helper
        - whether the authorization check reads from the same primary record that settlement clears
@@ -169,6 +173,14 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - mutate reserve/accounting state with a public sync/update function
          - immediately consume that mutated state in the next pricing / withdrawal / burn step
          - verify whether final state appears restored even though value was extracted during the intermediate bad state
+       - explicitly test sentinel-address variants:
+         - `address(0)`, dead address, pair, router, staking, treasury, distributor, helper, and escrow recipients/senders
+         - whether any early return, bypass, or special-case branch for those addresses skips fee logic, buy/sell restrictions, claim gating, or accounting hooks
+         - whether a swap or router path can legally force tokens to one of those sentinel addresses and thereby bypass intended restrictions
+       - explicitly test stale-global-state ordering:
+         - whether old pending buckets, fee buckets, burn debt, cached reserves, or prior-user state are consumed before the current user's action is accounted
+         - whether the protocol mutates pair/vault/market balances from stale global state, calls `sync()` / update, and only afterward books the current order
+         - whether the attacker can choose the current action amount or recipient to leave a target residual reserve and exploit the post-sync price
        - for forked lending or vault systems, do not assume “standard Compound/Aave/ERC4626 logic” is safe; prove the local state-delta invariant on the actual modified code
      - **Large Capital / Threshold Pass**:
        - every threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, `claim`, `process`, `autoSwap`, or fee accumulator
@@ -191,6 +203,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - partial failure / `catch` / fallback branches
        - stale cached state vs live state
        - first-write-wins state
+       - early-return branches for sentinel addresses (`address(0)`, dead, pair, router, staking, treasury)
+       - “consume old global state first, then process current user action” orderings
        - poisoned registries / subscribers / escrows / approvals
        - mismatches between docs, comments, and actual live behavior
 
@@ -214,6 +228,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether a tiny directional bias compounds inside a callback, unlock, multicall, or router-driven loop
      - whether one swap direction gets consistently better pricing and the reverse leg does not fully cancel the edge
      - whether the approximated execution price differs from the true curve integral or exact invariant solution
+     - whether the exact exploit path requires a sentinel recipient or sender such as `address(0)`, dead address, pair, router, or staking contract to bypass a guarded branch
+     - whether the exploit relies on consuming stale pending state before the current swap/order is accounted, rather than on the current action alone
    - When a wrapper delegates the real pricing logic, the checklist must name both the wrapper and the delegated files.
    - For any custom curve or nonlinear helper-priced system, one agent must explicitly search for profit from repeated alternating swaps and compounding micro-edges rather than only one-shot drains.
    - For any mint / redeem / borrow / repay / liquidation system, one agent must explicitly search for state-delta mismatches where:

@@ -170,9 +170,23 @@ For token / AMM systems that can touch pair balances, ask:
 - Is that pair-side destruction fed by public user actions rather than only privileged admin calls?
 - Does the contract call `sync()` after pair-side destruction, making the reserve skew immediately tradable?
 - Can an attacker loop `buy -> trigger sell/transfer hook -> accumulate pair-burn debt -> burn pair reserve -> sync -> extract opposite reserve`?
+- Can any sentinel recipient/sender such as `address(0)`, dead address, pair, router, staking contract, treasury, or distributor bypass a guarded buy/sell/fee branch through an early return or special-case path?
+- Does the protocol consume stale global pending state (fee bucket, burn debt, cached reserve mutation) before the current user's action is accounted, letting the attacker choose the current action to exploit the already-mutated reserves?
 - After realistic flashloan size, taxes, fees, and slippage, does collapsing the token-side reserve leave the opposite reserve profitably drainable?
 
 If these questions were not checked, attacker profitability for pair-burn / LP-reserve-destruction systems is **not confirmed**.
+
+## Gate 3.59 — Sentinel Address / Sequence Reconstruction Check
+
+For hook-driven tokens, routers, vaults, and reserve-mutating systems, ask:
+
+- Do any branches special-case `address(0)`, dead address, pair, router, staking, treasury, distributor, escrow, or helper addresses?
+- Can one of those sentinel addresses bypass a restriction only because the code returns early before the guarded path or accounting hook runs?
+- Can a router or pair legally force assets to that sentinel address during a public swap/mint/burn path?
+- Is there at least one concrete exploit sequence that goes beyond the bug family and specifies the actual order, including seed action, state mutation, bypass branch, dust trigger if needed, and final extraction leg?
+- Does the path rely on consuming stale global state before the current action, rather than on the current action alone?
+
+If these questions were not checked, attacker profitability for sentinel-address / exact-sequence exploits is **not confirmed**.
 
 ## Gate 3.6 — Reward Solvency Check
 
@@ -184,6 +198,10 @@ For reward-, staking-, dividend-, yield-, referral-, or principal-tracking syste
 - Does the exploit need real external yield, or can it be funded entirely by later deposits, temporary capital, or flash-loaned liquidity?
 - Does the protocol become immediately drainable once cash-on-hand is lower than reported contributed principal / assets / shares / liabilities?
 - Are public variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `shares`, `assets`, `principal`, or equivalent left overstated after cash leaves the contract?
+- Are deposit, rank, or qualification thresholds scaled to the token's actual decimals, or can a tiny deposit satisfy a whole-token requirement because the code compares against a raw literal?
+- Is a one-time reward / pool / rank latch checked but never flipped after the payout, allowing the same reward path to fire repeatedly?
+- Can a referrer or sponsor use many cheap helper accounts to repeatedly satisfy the same threshold and mint treasury-backed rewards?
+- Does the public claim path convert synthetic accounting balances into real treasury outflows without an independent reserve-backing check?
 
 If these questions were not checked, attacker profitability for reward/accounting systems is **not confirmed**.
 
@@ -239,7 +257,10 @@ Before finalizing leads, promote where warranted:
 - **Donation-inflation economics.** If the source trace shows direct underlying donations can raise exchange rate or collateral value for an unchanged share balance, do not demote it to “design” or “non-empty market” until pre-existing-holder, recursive-borrow, and post-liquidation bad-debt variants have been checked.
 - **Transient reserve economics.** If the source trace shows a public sync/update path can temporarily reclassify locked or unsellable funds into the priced reserve, do not demote it to “eventual consistency” until a same-tx `sync -> burn/sell/redeem` extraction loop has been checked.
 - **Pair-burn economics.** If the source trace shows public user flow feeds a pending burn bucket or other path that can burn LP/pair inventory and then `sync()`, do not demote it to “tokenomics” until `buy -> hook -> pair-burn -> sync -> opposite-reserve extraction` has been checked.
+- **Sentinel-bypass economics.** If the source trace shows an early return or special-case branch for `address(0)`, dead address, pair, router, staking, treasury, or distributor, do not demote it to “edge case” until buy/sell/claim bypass and exact exploit-sequence variants have been checked.
+- **Stale-global-state economics.** If the source trace shows stale pending state is consumed before the current user action is accounted, do not stop at the bug family; complete one exact exploit sequence showing how the attacker chooses amount/recipient/order to realize the skew.
 - **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
+- **Reward-threshold economics.** If the source trace shows a reward threshold using raw literals against decimal-scaled token amounts, or a one-time reward latch checked but never consumed, do not demote it to “logic bug” until helper-farmed reward amplification and treasury claim-out have been checked.
 - **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
 - **One-time-claim economics.** If the source trace shows settlement clears only an owner index / helper list / enumerable set while the primary record still authorizes payout, do not demote it to “bookkeeping” until same-id repeat-claim / repeat-withdraw has been checked.
 
