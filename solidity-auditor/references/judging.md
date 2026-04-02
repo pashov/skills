@@ -38,6 +38,12 @@ Before Gate 1, discovery must also answer:
 - whether reward payout reduces the same liability bucket from which the reward was derived, or only spends cash while liabilities remain overstated
 - whether two attacker-controlled accounts can cycle deposits, reward accrual, withdrawals, and principal exits to realize the accounting mismatch
 - whether insolvency or low live balance turns an otherwise circular reward model into an immediate public drain
+- whether every value-moving path preserves state-delta equality between:
+  - user mint/burn/borrow/repay amount
+  - global supply / debt / shares / assets mutation
+  - transferred underlying amount
+- whether any clamp, sentinel branch, balance cap, or rounding adjustment is applied only after global state has already been mutated
+- whether dust-position variants (`dust mint -> large redeem`, `dust collateral -> large borrow`, `redeemUnderlying(getCash())`, `type(uint256).max`) were checked
 - for Morpho / MetaMorpho style systems, whether each specific issue family was explicitly considered and either validated or disproven:
   - empty / near-empty downstream market attack
   - bad curation / cap attack
@@ -126,6 +132,18 @@ For reward-, staking-, dividend-, yield-, referral-, or principal-tracking syste
 
 If these questions were not checked, attacker profitability for reward/accounting systems is **not confirmed**.
 
+## Gate 3.7 — Value-Moving Invariant Check
+
+For mint/redeem/borrow/repay/liquidate/claim/withdraw/share-conversion systems, ask:
+
+- Does the global state delta equal the per-user state delta for the same economic action?
+- Is the transferred amount derived from the same effective quantity that is burned/minted/borrowed/repaid in storage?
+- Are clamps, caps, sentinel values, dust handling, or balance checks applied before both global and per-user mutations, rather than after one side has already changed?
+- Can a dust position trigger a large quoted transfer while only a tiny user balance is burned or locked?
+- Does any path reduce `totalSupply`, `totalBorrows`, `totalAssets`, `shares`, or similar global values by a larger amount than is actually removed from the attacker account?
+
+If these questions were not checked, attacker profitability for value-moving accounting systems is **not confirmed**.
+
 ## Gate 4 — Impact
 
 Prove material harm to an identifiable victim.
@@ -161,6 +179,7 @@ Before finalizing leads, promote where warranted:
 - **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
 - **Fork-sensitive economics.** If the code is a near-fork of a historically exploited design, do not reject the inherited issue class until the source diff proves the critical bootstrap or accounting assumption was actually changed.
 - **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
+- **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
 
 ## Leads
 

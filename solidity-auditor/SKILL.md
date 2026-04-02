@@ -116,6 +116,25 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether insolvency or low cash balance converts a circular reward model into an immediate drain
        - whether public state variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `principal`, `shares`, `assets`, or similar remain overstated after cash leaves the contract
        - whether direct ETH/token donations, flash-loaned deposits, or attacker-listed worthless assets make the accounting exploit cheaper without changing permissions
+     - **Value-moving state delta pass**:
+       - for every `mint`, `redeem`, `redeemUnderlying`, `withdraw`, `deposit`, `borrow`, `repay`, `liquidate`, `claim`, `burn`, `seize`, or share-conversion path, compare:
+         - user balance delta
+         - global supply / total assets / total debt / total shares delta
+         - transferred asset amount
+       - verify the same effective amount is used consistently across:
+         - quoting
+         - allowance / solvency / liquidity checks
+         - global state mutation
+         - per-user state mutation
+         - final transfer
+       - explicitly test whether any clamp, cap, sentinel handling, rounding, or balance check happens only after one side of accounting has already been mutated
+       - explicitly test dust-position variants:
+         - dust mint then oversized redeem
+         - dust collateral then max borrow
+         - full-cash redeem / withdraw
+         - `type(uint256).max` / sentinel-value branches
+         - first-user / tiny-supply / tiny-share states
+       - for forked lending or vault systems, do not assume “standard Compound/Aave/ERC4626 logic” is safe; prove the local state-delta invariant on the actual modified code
      - **Large Capital / Threshold Pass**:
        - every threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, `claim`, `process`, `autoSwap`, or fee accumulator
        - whether a large trade or flash loan can cross the threshold in one transaction
@@ -161,6 +180,10 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether the approximated execution price differs from the true curve integral or exact invariant solution
    - When a wrapper delegates the real pricing logic, the checklist must name both the wrapper and the delegated files.
    - For any custom curve or nonlinear helper-priced system, one agent must explicitly search for profit from repeated alternating swaps and compounding micro-edges rather than only one-shot drains.
+   - For any mint / redeem / borrow / repay / liquidation system, one agent must explicitly search for state-delta mismatches where:
+     - global accounting is mutated before per-user accounting is clamped or validated
+     - per-user accounting is mutated using a different amount than global accounting
+     - transfer amount is derived from a pre-clamp or pre-rounding quote while user burn/mint uses a post-clamp or post-rounding amount
    - Also explicitly record:
      - every payable `receive()` / `fallback()` / zero-calldata entrypoint
      - every path that reaches reward minting, claiming, mining, withdrawal, or pool updates without going through `_transfer`
@@ -266,6 +289,7 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - check whether docs-promised liquidity / reward / burn / rebalance / mining features are live, dead, or only threshold-dormant onchain
    - determine whether the system is a fork or close derivative of a known protocol, and if so, explicitly investigate the parent protocol's historically exploited issue classes
    - for lending / vault / market protocols, explicitly investigate empty-market, empty-pool, share-inflation, first-depositor, and donation-based bootstrap attacks before clearing the system
+   - for lending / vault / market protocols, explicitly trace every redeem / mint / borrow / repay path and prove that user deltas, global deltas, and transfer amounts stay equal under clamping, sentinel values, and dust positions before clearing the system
    - for Morpho / MetaMorpho / lending-vault style systems, explicitly investigate allocator/curator misrouting, downstream market emptiness, oracle/collateral weakness, cap misconfiguration, withdrawal liquidity starvation, and ERC4626/share-bootstrap risks before clearing the system
    - the final notes for Morpho / MetaMorpho style systems must say which of these were checked and under what conditions they would become live: empty-market attack, bad curation/cap attack, oracle/collateral attack, withdrawal-liquidity starvation, share-bootstrap/donation inflation, fork-with-minimal-diff inheritance
 
