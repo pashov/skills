@@ -86,6 +86,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - repeat tiny actions many times
        - reverse intended operation order
        - mix helper + main contract entrypoints in one path
+       - self-liquidate / self-seize / self-refund / self-withdraw where caller and target are the same address
+       - same-market / same-asset paths where borrow asset, collateral asset, payout asset, or accounting bucket collapse to the same value
      - **Fork-lineage / inherited-bug checks**:
        - whether the code is a fork / close derivative of Aave, Compound, Uniswap, MasterChef, ERC4626 vaults, lending markets, CDPs, gauges, or common staking vaults
        - whether the fork retained known attack surfaces from the parent design even if the current diff looks unrelated
@@ -111,8 +113,13 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether any public transfer hook, sell hook, pending-burn variable, fee bucket, or maintenance path can burn tokens directly from the LP/pair address
        - whether the amount burned from the pair is fed by public user flow such as sells, transfers, or swaps rather than privileged-only admin calls
        - whether the contract calls `sync()` after burning pair inventory, making the reserve distortion immediately exploitable
+       - whether a sell or transfer both credits the pair with tokens and separately records those same tokens into a deferred burn / fee / extraction bucket that can later remove pair inventory again
        - whether a profitable loop exists of the form `buy -> trigger sell/transfer hook -> accumulate pair-burn debt -> burn pair balance -> sync -> extract opposite reserve`
        - whether the code destroys the token-side reserve of the pair without correspondingly removing the quote-side reserve, making the opposite asset drainable
+       - whether any apparently privileged pair-burn / extraction path is reachable from a public upstream trigger such as `claim`, `distribute`, `process`, `harvest`, `rebalance`, `withdraw`, router flow, or keeperless maintenance call
+       - whether attacker inventory can be sourced indirectly through router-held output, pair-to-router transfers, router-mediated liquidity removal, helper custody, or any sentinel-address branch even when direct buys are blocked
+       - whether the review produced a full exploit chain covering `inventory source -> queued reserve mutation -> public/helper realization -> sync/update -> final extraction leg`
+       - whether a simpler direct bug elsewhere in the codebase is distracting from a stronger reserve-burn exploit; pair-burn plus `sync()` must still be completed and ranked if the trigger chain remains live or unresolved
      - **Morpho / MetaMorpho / lending-vault checks**:
        - whether the vault or wrapper allocates into underlying markets that can be empty or near-empty
        - whether allocator / curator / owner can route funds into risky long-tail markets before users can react
@@ -218,6 +225,36 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - helper balances and recipients
        - whether value actually reaches attacker, founder, treasury, sink, or stays inert
        - whether the helper path is dead, dormant, threshold-gated, or immediately reachable
+     - **Critical-surface completion pass**:
+       - do not stop after the first severe-looking issue
+       - enumerate every critical value-moving family before finalizing:
+         - `withdraw`, `unstake`, `redeem`, `claim`, `borrow`, `repay`, `liquidate`, `seize`, `mint`, `burn`, `deposit`, `removeLiquidity`, `sync`, `settle`, `execute`, `rescue`, `refund`
+       - for each family, record whether review is complete, incomplete, blocked, or irrelevant
+       - if one major finding is found early, continue auditing all remaining critical paths before ranking findings or writing the report
+       - if a later path shows public pair-balance destruction, deferred pair-burn realization, or reserve mutation followed by `sync()`, rank that exploit above softer accounting, DoS, or owner-takeover issues unless the user explicitly asked for a different emphasis
+       - if the code exposes all pieces of an exploit chain across different files or helper contracts, the audit is not complete until those pieces are synthesized into one end-to-end attack path or concretely disproven
+       - for lending systems specifically, do not finalize before checking at least:
+         - supply / deposit
+         - withdraw / redeem
+         - borrow
+         - repay
+         - liquidate / seize
+         - self-liquidation / same-account liquidation
+         - same-asset borrow-vs-collateral liquidation
+         - admin / init / configuration takeover
+         - oracle / pricing / collateral valuation
+       - explicitly test attacker-chosen aliasing cases:
+         - same address on both sides of an operation
+         - same asset on both sides of an operation
+         - different local storage references resolving to the same slot
+         - same id / same record / same bucket / same role value on both sides of an operation
+         - attacker-controlled equality conditions that collapse two logically distinct roles, accounts, assets, ids, records, or buckets into one storage target
+         - sequential writes where the second write can overwrite the first, break netting assumptions, or mint / preserve value incorrectly
+         - borrower and liquidator resolving to the same account in liquidation code
+         - borrower collateral and liquidator collateral resolving to the same `(account, asset)` slot
+         - helper-temporary account sequences that seed liquidity in one account and realize the aliased gain in another
+       - these aliasing checks are source-level requirements and must be performed even without any exploit hint, trace, or onchain incident context
+       - if any critical family is left unchecked, the audit is incomplete and must not be presented as fully covered
      - **Weird-machine candidates**:
        - partial failure / `catch` / fallback branches
        - stale cached state vs live state
@@ -253,6 +290,10 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether the exploit relies on consuming stale pending state before the current swap/order is accounted, rather than on the current action alone
    - When a wrapper delegates the real pricing logic, the checklist must name both the wrapper and the delegated files.
    - For any custom curve or nonlinear helper-priced system, one agent must explicitly search for profit from repeated alternating swaps and compounding micro-edges rather than only one-shot drains.
+   - For any token / AMM system that can touch pair balances, one agent must explicitly reconstruct the full chain `public user flow -> pending bucket / deferred mutation -> pair-side burn or reserve mutation -> sync/update -> final extraction trade`, even if a simpler direct bug has already been found elsewhere in the codebase.
+   - For any token / AMM system with a public or permissionless helper/distributor/mining/reward contract, one agent must explicitly test whether that helper can be the unprivileged trigger for the reserve-mutation chain, even if the final reserve-touching function is role-gated on the token itself.
+   - For any token / AMM system that records deferred burn / pending burn / fee bucket / sell bucket state, one agent must explicitly test the exact chain `inventory accumulation -> sell or transfer creates deferred bucket -> public helper or maintenance call realizes pair-side mutation -> sync/update -> attacker dumps inventory`, and must not clear the system until that sequence is either proved profitable or concretely refuted.
+   - If a token claims buys are blocked or wallet-only, one agent must explicitly search for router-held, pair-held, or helper-held inventory paths that still let an attacker accumulate inventory indirectly before the final extraction leg.
    - For any mint / redeem / borrow / repay / liquidation system, one agent must explicitly search for state-delta mismatches where:
      - global accounting is mutated before per-user accounting is clamped or validated
      - per-user accounting is mutated using a different amount than global accounting
@@ -306,6 +347,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - public `sync/update -> sell/burn` in the same transaction
      - repeated `mint/buy -> sync/update -> burn/sell -> repeat`
      - whether final end-of-tx storage looks consistent even though the intermediate pricing state was corrupted
+     - whether a deferred maintenance path such as `distribute`, `process`, `harvest`, `rebalance`, `claim`, or mining/reward distribution can be called by an unprivileged user and thereby realize the corrupting reserve mutation on demand
    - Treat “restored by end of tx” as irrelevant if value can be extracted during the temporary bad state.
 7. `{bundle_dir}/source.md` — a short `# Audit Scope` section listing the expanded source set, then a `# Discovery Checklist` section, then a `# Pricing / Invariant Hotspots` section capturing the checklist above, then ALL expanded in-scope `.sol` files, each with a `### path` header and fenced code block.
 8. Agent bundles = `source.md` + agent-specific files:
@@ -337,9 +379,19 @@ Your bundle file is {bundle_dir}/agent-N-bundle.md (XXXX lines).
 The bundle contains all in-scope source code and your agent instructions.
 Read the bundle fully before producing findings.
 You must include at least one non-standard / unusual exploit attempt from the discovery checklist, even if it is later rejected.
+If the bundle contains any mint / redeem / borrow / repay / liquidate logic, you must explicitly test same-address and same-asset aliasing cases and report the outcome, even if no bug is found.
+For liquidation systems specifically, test `borrower == liquidator` and `assetBorrow == assetCollateral` as mandatory source-level cases before concluding the path is safe.
 ```
 
 **Turn 4 — Deduplicate, validate & output.** Single-pass: deduplicate all agent results, gate-evaluate, and produce the final report in one turn. Do NOT print an intermediate dedup list — go straight to the report.
+
+Before report formatting, perform a **Critical Surface Completion Review**:
+
+- confirm every critical value-moving family from discovery has been marked complete, blocked, irrelevant, or rejected with reasoning
+- do not finalize the report just because one high-severity issue already exists
+- if a stronger direct public exploit is found later in another critical path, it must replace weaker earlier findings as the primary finding
+- if review of any critical family remained incomplete, say so explicitly and do not imply full audit coverage
+- when multiple findings exist, rank the more direct live public cash-out / solvency break above setup, config, or takeover issues unless the user asked for a different emphasis
 
 1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
 
@@ -383,6 +435,8 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - If profitability depends on parameters or reserve ratios, did you test defaults, allowed configuration bounds, and realistic reserve skews rather than one default sample?
    - If profitability depends on a threshold or dormant path, did you test whether a whale or flashloan can cross it in one transaction?
    - Did you compare the forced move size against live reserves and realistic execution costs?
+   - Did you test whether the attacker can first accumulate inventory indirectly through router-held output, helper-held output, LP-removal output, or other non-standard “buy blocked but inventory still accumulates” paths before the final dump?
+   - If the exploit uses deferred burn / pending burn / fee buckets, did you identify the exact public function that realizes that deferred state and the exact transaction ordering needed to monetize it?
    If yes to any, treat the helper/hook/library path as part of the same exploit surface, not a separate optional review.
 
    **Non-transfer / reward-system minimum checks:** for any finding touching rewards, staking, mining, claims, wallet-only restrictions, or payable entrypoints, the validation pass must explicitly answer:
@@ -442,7 +496,7 @@ You must include at least one non-standard / unusual exploit attempt from the di
    - `Privileged only:` Yes / No
    If `Live on this deployment` or `Attacker profitable` is `Unknown`, do not present it as a confirmed profitable exploit.
 
-7. **Format and print** per `report-formatting.md`. Exclude rejected items. If `--file-output`: also write to file.
+7. **Format and print** per `report-formatting.md`. Exclude rejected items. The final answer must be the report itself, not a prose summary. Every surviving finding must keep its bracketed confidence score, Status block, and PoC Concept block. If `--file-output`: also write to file.
 
 ## Banner
 
