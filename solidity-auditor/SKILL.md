@@ -54,13 +54,24 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - every `external` / `public` state mutator
        - every `payable` function
        - every `receive()` / `fallback()`
+       - every meta-tx / trusted-forwarder / `execute` / relay entrypoint
        - every callback / hook / router callback / ERC721 receiver / token receiver
        - every `claim`, `claimFor`, `refund`, `refundFor`, `withdraw`, `sweep`, `rescue`, `execute`, `deposit`, `mint`, `burn`, `liquidate`
        - every user-controlled approval, referrer, recipient, treasury, helper, or target parameter
+     - **Value-out-first pass**:
+       - identify every function that can move value out of the protocol first: `withdraw`, `unstake`, `redeem`, `claim`, `removeLiquidity`, `borrow`, `sweep`, `refund`, `rescue`, native coin transfer, token transfer, LP removal, or router-assisted asset exit
+       - for each such function, trace in order:
+         - what assets leave
+         - what user record or entitlement authorizes the exit
+         - whether the record is invalidated before or after any external call
+         - whether custody is pooled at contract level or segregated per user
+       - if a value-out path uses a raw external call, token transfer hook, router call, LP removal, or native coin send before invalidating the authorizing record, treat it as a top-priority reentrancy candidate immediately
      - **Assumption inversion**:
        - what assumptions the code appears to rely on
        - what happens if caller is a contract instead of an EOA
        - what happens if the caller is an EOA using delegated code / account-abstraction semantics (including EIP-7702-style behavior) rather than a plain legacy wallet
+       - what happens if the call arrives through a trusted forwarder and the code mixes `msg.sender` with `_msgSender()`
+       - what happens if a forwarder-aware contract composes with a non-forwarder-aware token or helper, so allowance owner, burned account, callback user, credited account, refund recipient, and payout recipient can diverge
        - what happens if recipient rejects ETH / token receipt
        - what happens if helper contracts are called directly, before, after, or instead of the intended wrapper path
        - what happens if first caller / first deposit / first NFT / first registration / first config write is malicious
@@ -181,6 +192,14 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - whether old pending buckets, fee buckets, burn debt, cached reserves, or prior-user state are consumed before the current user's action is accounted
          - whether the protocol mutates pair/vault/market balances from stale global state, calls `sync()` / update, and only afterward books the current order
          - whether the attacker can choose the current action amount or recipient to leave a target residual reserve and exploit the post-sync price
+       - explicitly test forwarder-identity variants:
+         - whether any path uses `msg.sender` for funding, allowance, burn source, callback source, refund recipient, or external call target while using `_msgSender()` for accounting credit, authorization, or payout recipient
+         - whether a trusted forwarder can make one address fund/burn/approve while a different appended signer receives rewards, fees, or claim credit
+         - whether a fresh signer with stale `lastActiveCycle`, `lastFeeUpdateCycle`, reward debt, or similar lifecycle state can replay historical reward or fee math using assets supplied by the forwarder
+       - explicitly test reentrancy-before-invalidation variants:
+         - whether a value-out path performs `call`, token transfer, router interaction, LP removal, NFT transfer, or any external interaction before clearing `isStaking`, `claimed`, `amount`, `lpAmount`, share balance, or similar authorizing state
+         - whether `hasStaked`, `hasPosition`, `isActive`, balance checks, or entitlement checks still succeed during the external call window
+         - whether pooled custody makes repeat use of the same stale record spend shared inventory rather than reverting against isolated user balances
        - for forked lending or vault systems, do not assume “standard Compound/Aave/ERC4626 logic” is safe; prove the local state-delta invariant on the actual modified code
      - **Large Capital / Threshold Pass**:
        - every threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, `claim`, `process`, `autoSwap`, or fee accumulator
@@ -205,6 +224,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - first-write-wins state
        - early-return branches for sentinel addresses (`address(0)`, dead, pair, router, staking, treasury)
        - “consume old global state first, then process current user action” orderings
+       - trusted-forwarder identity splits where funding/burning/refunding uses `msg.sender` but accounting/payout uses `_msgSender()`
+       - value-out functions that call out before clearing the record that authorizes withdrawal
        - poisoned registries / subscribers / escrows / approvals
        - mismatches between docs, comments, and actual live behavior
 

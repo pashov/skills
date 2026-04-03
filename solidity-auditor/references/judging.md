@@ -28,6 +28,10 @@ Before Gate 1, discovery must also answer:
 - what non-standard path is being tested
 - whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
 - whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
+- whether any trusted-forwarder / relay / `execute` path can make funding, allowance ownership, burn source, callback user, accounting credit, refund recipient, and payout recipient diverge because the code mixes `msg.sender` and `_msgSender()`
+- whether a forwarder-aware contract composes with a non-forwarder-aware token/helper in a way that lets a fresh signer inherit stale reward or fee math using assets supplied by the forwarder
+- whether any value-out function (`withdraw`, `unstake`, `redeem`, `claim`, `removeLiquidity`, `refund`, `rescue`, native send, token transfer`) makes an external interaction before invalidating the record or entitlement that authorizes the exit
+- whether custody for the withdrawn asset is pooled at contract level, so repeated use of one stale record can spend shared inventory instead of isolated user balances
 - whether the path depends on crossing a threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, or any fee accumulator
 - whether a large-capital or flashloan actor can cross that threshold in one transaction
 - whether live reserves, balances, and taxes make the path economically meaningful rather than merely reachable
@@ -188,6 +192,28 @@ For hook-driven tokens, routers, vaults, and reserve-mutating systems, ask:
 
 If these questions were not checked, attacker profitability for sentinel-address / exact-sequence exploits is **not confirmed**.
 
+## Gate 3.60 — Forwarder Identity Split Check
+
+For ERC2771 / relay / trusted-forwarder systems, ask:
+
+- Does any value-moving path use raw `msg.sender` for funding, allowance ownership, burn source, callback source, or refund destination while using `_msgSender()` for accounting credit, authorization, or payout?
+- Can a forwarder-aware contract interact with a non-forwarder-aware token or helper so that the forwarder supplies assets or approvals while the appended signer receives credit, rewards, fees, or claims?
+- After the forwarder-mediated action, do lifecycle variables such as `lastActiveCycle`, `lastFeeUpdateCycle`, `rewardDebt`, `nonce`, `claimed`, or similar remain stale for the credited signer?
+- Can a fresh or stale signer replay old reward/fee/cycle math using assets burned, approved, or funded by the forwarder?
+
+If these questions were not checked, attacker profitability for forwarder-identity-split exploits is **not confirmed**.
+
+## Gate 3.61 — Value-Out Reentrancy Check
+
+For withdrawal / unstake / redeem / claim / liquidity-removal systems, ask:
+
+- Does the function perform any external interaction before clearing or invalidating the user record that authorizes the withdrawal?
+- During that interaction window, do `hasStaked`, `hasPosition`, `isActive`, balance/entitlement checks, or similar still pass on the same record?
+- Can a fallback or hook reenter the same function or a sibling value-out function before the record is cleared?
+- If pooled assets are used, does the repeated call spend shared contract inventory rather than isolated user custody?
+
+If these questions were not checked, attacker profitability for value-out reentrancy exploits is **not confirmed**.
+
 ## Gate 3.6 — Reward Solvency Check
 
 For reward-, staking-, dividend-, yield-, referral-, or principal-tracking systems, ask:
@@ -259,6 +285,8 @@ Before finalizing leads, promote where warranted:
 - **Pair-burn economics.** If the source trace shows public user flow feeds a pending burn bucket or other path that can burn LP/pair inventory and then `sync()`, do not demote it to “tokenomics” until `buy -> hook -> pair-burn -> sync -> opposite-reserve extraction` has been checked.
 - **Sentinel-bypass economics.** If the source trace shows an early return or special-case branch for `address(0)`, dead address, pair, router, staking, treasury, or distributor, do not demote it to “edge case” until buy/sell/claim bypass and exact exploit-sequence variants have been checked.
 - **Stale-global-state economics.** If the source trace shows stale pending state is consumed before the current user action is accounted, do not stop at the bug family; complete one exact exploit sequence showing how the attacker chooses amount/recipient/order to realize the skew.
+- **Forwarder-identity economics.** If the source trace shows mixed `msg.sender` / `_msgSender()` usage across funding, burn, callback, accounting, or payout, do not demote it to “meta-tx integration issue” until a forwarder-supplied / signer-credited exploit sequence has been checked.
+- **Value-out reentrancy economics.** If the source trace shows a value-out function performing an external call or LP removal before invalidating the authorizing record, do not demote it to “missing nonReentrant” or “theoretical reentrancy” until pooled-custody and same-record repeat-withdraw variants have been checked.
 - **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
 - **Reward-threshold economics.** If the source trace shows a reward threshold using raw literals against decimal-scaled token amounts, or a one-time reward latch checked but never consumed, do not demote it to “logic bug” until helper-farmed reward amplification and treasury claim-out have been checked.
 - **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
