@@ -1481,6 +1481,11 @@
 - **D:** User manipulates oracle price via flash loan (push TWAP or spot price), self-liquidates via second address at the manipulated price, extracts more collateral than debt owed. Profitable when manipulation cost < liquidation bonus.
 - **FP:** TWAP with window > manipulation cost threshold. Chainlink/Pyth oracle resistant to single-tx manipulation. Self-liquidation blocked (`require(liquidator != borrower)`).
 
+**295A. Same-Account Self-Liquidation Storage Aliasing**
+
+- **D:** Liquidation code treats borrower and liquidator balances as independent locals, but attacker can set `borrower == liquidator` and optionally `assetBorrow == assetCollateral`, making both locals resolve to the same `(account, asset)` storage slot. The function computes `borrowerBalance - seized` and `liquidatorBalance + seized` separately, then writes them back sequentially; the later write overwrites the earlier one and mints or preserves collateral/value. Common shape: borrower collateral and liquidator collateral both read from `balances[user][asset]` under attacker-chosen equality conditions.
+- **FP:** Self-liquidation blocked explicitly (`require(liquidator != borrower)`) or same-market same-account path is proven to net against one shared balance before any writeback. If aliasing is allowed, code consolidates to a single storage reference and a single net write.
+
 **296. On-Chain Quoter-Based Slippage Calculation**
 
 - **D:** `minAmountOut` calculated on-chain using current spot price from an AMM quoter. Flash loan manipulates spot price before the tx, setting `minAmountOut` to near-zero, then sandwiches the actual swap.

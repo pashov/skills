@@ -27,8 +27,20 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 
 `ContractName.functionName` · Confidence: 95
 
+**Status**
+`Code bug:` Yes / No
+`Live on this deployment:` Yes / No / Unknown
+`Publicly exploitable:` Yes / No / Unknown
+`Attacker profitable:` Yes / No / Unknown
+`Privileged only:` Yes / No
+
 **Description**
 <The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+
+**PoC Concept**
+1. <Minimal trigger sequence>
+2. <State mutation that makes the bug real>
+3. <Extraction / impact step>
 
 **Fix**
 
@@ -42,8 +54,20 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 
 `ContractName.functionName` · Confidence: 82
 
+**Status**
+`Code bug:` Yes / No
+`Live on this deployment:` Yes / No / Unknown
+`Publicly exploitable:` Yes / No / Unknown
+`Attacker profitable:` Yes / No / Unknown
+`Privileged only:` Yes / No
+
 **Description**
 <The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+
+**PoC Concept**
+1. <Minimal trigger sequence>
+2. <State mutation that makes the bug real>
+3. <Extraction / impact step>
 
 **Fix**
 
@@ -61,8 +85,20 @@ Save the report to `assets/findings/{project-name}-pashov-ai-audit-report-{times
 
 `ContractName.functionName` · Confidence: 75
 
+**Status**
+`Code bug:` Yes / No
+`Live on this deployment:` Yes / No / Unknown
+`Publicly exploitable:` Yes / No / Unknown
+`Attacker profitable:` Yes / No / Unknown
+`Privileged only:` Yes / No
+
 **Description**
 <The vulnerable code pattern and why it is exploitable, in 1 short sentence>
+
+**PoC Concept**
+1. <Minimal trigger sequence>
+2. <State mutation that makes the bug real>
+3. <Extraction / impact step>
 
 ---
 
@@ -100,4 +136,4 @@ _Vulnerability trails with concrete code smells where the full exploit path coul
 
 ````
 
-**Rules:** Follow the template above exactly. Sort findings by confidence (highest first). Findings below the threshold get a description but no **Fix** block. The attacker profitability conclusion must be present and must address unprivileged attacker profit specifically, not generic risk. Draft findings directly in report format — do not re-generate.
+**Rules:** Follow the template above exactly. Every finding title line MUST start with a bracketed confidence tag like `[98]`, `[95]`, `[82]`. Every finding MUST include a **Status** block and a concrete **PoC Concept** block. Findings below the threshold get no **Fix** block, but they still MUST keep the confidence tag, status block, and PoC block. Sort findings by confidence (highest first). The attacker profitability conclusion must be present and must address unprivileged attacker profit specifically, not generic risk. Draft findings directly in report format — do not re-generate. Do not replace the report with a prose summary.
