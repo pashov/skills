@@ -44,6 +44,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - sibling files whose names match `*Hook*`, `*Helper*`, `*Oracle*`, `*Curve*`, `*Math*`, `*Quoter*`, `*Pricing*`
      - files defining or mutating symbols matched by `getAmountOut`, `getUnspecifiedAmount`, `price`, `reserve`, `sync`, `ln`, `exp`, `pow`, `curve`, `oracle`, or fee-adjusted amount variables
    - If the requested contract delegates pricing or reserve accounting, the helper/hook/library files are **in scope** even if the user named only the wrapper.
+   - If the requested contract calls external contracts that hold balances, compute prices, mint/burn claims, settle withdrawals, process deposits, or otherwise move value, those external dependencies are **in scope by default** even if they are referenced only by stored addresses or low-level calls.
+   - Stored-address dependencies are not optional. If the named contract calls a `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, `executor`, or similarly stateful external contract during any value-moving path, you must fetch and analyze that dependency or explicitly mark the audit incomplete.
    - If execution price, reserve mutation, fee application, or invariant enforcement is split across wrapper + hook + helper + math library files, that split path is **critical path** and must be treated as the primary exploit surface, not optional supporting context.
    - If the requested contract or a coupled file uses `receive()`, `fallback()`, `tx.origin`, contract/EOA checks, or reward/claim side effects, those contracts are **in scope** even if they look like periphery.
    - If the codebase is a fork or near-fork of a known protocol, import-paths, naming, storage layout, comments, and copied function signatures must be used to identify the parent protocol lineage. Once lineage is identified, inherited issue classes from that parent protocol and its common forks are **in scope by default** unless clearly removed by source changes.
@@ -65,7 +67,16 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - what user record or entitlement authorizes the exit
          - whether the record is invalidated before or after any external call
          - whether custody is pooled at contract level or segregated per user
+         - which external dependencies are called along the value path
        - if a value-out path uses a raw external call, token transfer hook, router call, LP removal, or native coin send before invalidating the authorizing record, treat it as a top-priority reentrancy candidate immediately
+     - **Dependency-closure pass**:
+       - identify every external contract address stored in state or returned by another contract that is used during deposit, withdraw, mint, burn, claim, settlement, pricing, reward, liquidation, or upgrade logic
+       - for each such dependency, record whether it was:
+         - analyzed directly
+         - fetched but blocked by missing source / missing verification / tooling failure
+         - proven irrelevant to value movement
+       - if a dependency remains unresolved and it is part of a value-moving or price-setting path, mark the audit as incomplete and do not present the result as full coverage
+       - treat low-level `call`, `delegatecall`, selector-only calls, and decompiled external references as mandatory coupling evidence, not optional context
      - **Assumption inversion**:
        - what assumptions the code appears to rely on
        - whether custom policy logic lives only in `transfer()` while `transferFrom()` or `_transfer()` remains inherited or differently guarded
@@ -263,6 +274,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - helper-temporary account sequences that seed liquidity in one account and realize the aliased gain in another
        - these aliasing checks are source-level requirements and must be performed even without any exploit hint, trace, or onchain incident context
        - if any critical family is left unchecked, the audit is incomplete and must not be presented as fully covered
+       - if any value-moving external dependency remains unchecked, the audit is incomplete and must not be presented as fully covered
      - **Weird-machine candidates**:
        - partial failure / `catch` / fallback branches
        - stale cached state vs live state
@@ -317,6 +329,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether an empty or near-empty reserve can amplify `liquidityIndex`, `borrowIndex`, normalized income, or any accumulator later used in scaled-balance math
      - whether public flashloans or fee repayment paths can be looped repeatedly to compound those indices
      - whether a public sync/reconcile path can transiently make pricing read from the wrong reserve bucket even if storage is restored later in the same transaction
+     - whether any unresolved external dependency still sits on the critical value path, and if so, which exploit families remain blocked pending that dependency review
 
 4. **Reserve-index hotspot checklist is mandatory for lending markets.**
    - Before clearing any Aave-style or scaled-balance lending system, identify and record:

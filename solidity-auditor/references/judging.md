@@ -27,6 +27,7 @@ Before Gate 1, discovery must also answer:
 - what assumption is being inverted
 - what non-standard path is being tested
 - whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
+- whether every external dependency on the value path was actually analyzed, rather than being left as an unresolved “external contract” note
 - whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
 - whether a contract uses one security-critical path for `transfer()` but leaves `transferFrom()` or `_transfer()` inherited, allowing router / allowance / permit flows to bypass the advertised policy layer
 - whether constructor-time callers can evade `extcodesize` / `code.length` / `isContract` checks and thereby reach a path that would block an already-deployed contract
@@ -51,6 +52,7 @@ Before Gate 1, discovery must also answer:
 - whether any function that looks role-gated or helper-only is in fact reachable from a public upstream trigger such as `claim`, `distribute`, `process`, `harvest`, `rebalance`, router flow, or keeperless maintenance entrypoint
 - whether a deferred `pendingBurn`, fee bucket, reward bucket, burn debt, or similar queued mutation can be realized by a separate public helper / mining / distributor / maintenance entrypoint
 - whether one user-controlled action can write a global queued state and a later unrelated user-controlled action can consume that same state against shared reserves, balances, or accounting buckets
+- whether any external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, or selector-only low-level call remains unresolved even though it sits on a deposit / withdraw / mint / burn / claim / liquidation / settlement path
 - whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
 - for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
   - inventory source
@@ -106,7 +108,9 @@ Prove the vulnerable state exists in a live deployment.
 - Structurally impossible (enforced invariant prevents it) → **REJECTED**
 - Requires privileged actions outside normal operation → **DEMOTE**
 - Cross-contract helper / hook / library logic that the target contract actually calls is the same exploit surface, not an optional dependency review
+- Cross-contract `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `router`, `distributor`, and helper contracts actually called on the value path are the same exploit surface, not an optional dependency review
 - If execution price, reserve updates, or invariant enforcement are delegated, those delegated files are the critical path even when the named wrapper looks safe in isolation
+- If a critical external dependency could not be analyzed because source is missing or tooling failed, do not silently clear the path; keep the audit explicitly incomplete on that family
 - If the exploit depends on configurable parameters or reserve ratios, test reachable defaults, allowed config bounds, and normal reserve skews before rejecting
 - If the system is a fork of a known protocol, do not reject inherited issue classes until the source diff proves the critical invariant changed
 - For live audits, verify the actual onchain config values before treating a code bug as active
@@ -289,6 +293,17 @@ Before final ranking, ask:
 - Were attacker-controlled aliasing cases explicitly checked across the relevant category, not just one protocol type?
 - Did the audit continue after finding one major issue, rather than anchoring on that first issue and leaving stronger direct exploit paths unreviewed?
 - Were fragmented component findings merged into a single primary exploit when the end-to-end chain was source-reconstructable?
+
+If these questions were not checked, the audit is incomplete and any “final” conclusion must say so explicitly.
+
+## Gate 3.63 — Dependency Closure Check
+
+For any protocol, wrapper, decompiled target, or externally coupled contract, ask:
+
+- Were all value-moving external dependencies actually analyzed?
+- Does any unresolved external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `router`, `distributor`, `helper`, or selector-only low-level target still control pricing, balance accounting, minting, burning, settlement, or payout?
+- Was that dependency fetched and reviewed, or explicitly marked blocked with a concrete reason?
+- If blocked, does the final conclusion state that coverage is incomplete for that critical path?
 
 If these questions were not checked, the audit is incomplete and any “final” conclusion must say so explicitly.
 
