@@ -28,6 +28,8 @@ Before Gate 1, discovery must also answer:
 - what non-standard path is being tested
 - whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
 - whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
+- whether a contract uses one security-critical path for `transfer()` but leaves `transferFrom()` or `_transfer()` inherited, allowing router / allowance / permit flows to bypass the advertised policy layer
+- whether constructor-time callers can evade `extcodesize` / `code.length` / `isContract` checks and thereby reach a path that would block an already-deployed contract
 - whether any trusted-forwarder / relay / `execute` path can make funding, allowance ownership, burn source, callback user, accounting credit, refund recipient, and payout recipient diverge because the code mixes `msg.sender` and `_msgSender()`
 - whether a forwarder-aware contract composes with a non-forwarder-aware token/helper in a way that lets a fresh signer inherit stale reward or fee math using assets supplied by the forwarder
 - whether any value-out function (`withdraw`, `unstake`, `redeem`, `claim`, `removeLiquidity`, `refund`, `rescue`, native send, token transfer`) makes an external interaction before invalidating the record or entitlement that authorizes the exit
@@ -38,12 +40,17 @@ Before Gate 1, discovery must also answer:
 - whether the protocol is a fork / close derivative of a known design and whether known parent-protocol attack classes were checked
 - whether an empty or near-empty market / pool / vault / share system could be bootstrapped into a profitable mispricing state
 - whether a Compound/Venus-style market lets a pre-existing share holder donate underlying directly to the market, keep the same share count, and still gain borrow power through a higher exchange rate
+- whether any lending market, ERC4626 vault, wrapper, receipt-token system, or collateral vault can have its exchange rate / NAV / collateral value increased by passive underlying donations that bypass the formal deposit or mint path
+- whether supply caps, deposit caps, or mint accounting are enforced only on `deposit`, `mint`, or `supply`, while raw underlying transfers still increase priced assets
+- whether raw `balanceOf(address(this))`, `getCash`, `totalAssets`, or equivalent passive balance reads are used in exchange-rate or collateral calculations without excluding unsolicited donations
+- whether unchanged share count plus increased raw backing can produce new borrow power, redeemable value, or liquidation value
 - whether an empty or near-empty reserve could amplify `liquidityIndex`, `variableBorrowIndex`, normalized income, or any other accumulator used later in scaled-balance accounting
 - whether public flashloan premiums, fee updates, or reserve-update paths can be looped repeatedly against a dust denominator
 - whether the protocol separates priced reserve, locked reserve, treasury reserve, raw balance, or other reserve buckets, and whether a public path can reclassify one bucket into another
 - whether any public sync/reconcile/update function can transiently make pricing or payout logic read from the wrong reserve bucket
 - whether any function that looks role-gated or helper-only is in fact reachable from a public upstream trigger such as `claim`, `distribute`, `process`, `harvest`, `rebalance`, router flow, or keeperless maintenance entrypoint
 - whether a deferred `pendingBurn`, fee bucket, reward bucket, burn debt, or similar queued mutation can be realized by a separate public helper / mining / distributor / maintenance entrypoint
+- whether one user-controlled action can write a global queued state and a later unrelated user-controlled action can consume that same state against shared reserves, balances, or accounting buckets
 - whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
 - for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
   - inventory source
@@ -90,6 +97,7 @@ Construct the strongest argument that the finding is wrong. Find the guard, chec
 - A `tx.origin` / EOA / wallet-only check does **not** refute a finding if the same state change is reachable through `receive()`, `fallback()`, deposit, claim, helper, or any other externally callable path
 - A `msg.sender == tx.origin`, `code.length == 0`, or `isContract == false` check is a **flagged anti-pattern**, not a strong refutation, because delegated EOAs / account-abstraction behavior (including EIP-7702-style models) weakens the intended “EOA-only” guarantee
 - A safe intended UX flow does **not** refute a finding if an uglier legal sequence can still reach the same value movement
+- A `transfer()`-only guard does **not** refute a finding if router / allowance flow uses inherited `transferFrom()` or `_transfer()`
 
 ## Gate 2 — Reachability
 
@@ -106,6 +114,7 @@ Prove the vulnerable state exists in a live deployment.
 - Achievable through normal usage or common token behaviors → **clears**, continue
 - Payable `receive()` / `fallback()` entrypoints, flash loans, router callbacks, and helper-contract claims are normal reachable behavior when the code exposes them
 - Unusual but legal call ordering, first-write-wins poisoning, direct helper entry, and purpose-built exploit wallets are normal reachable behavior when public functions permit them
+- Constructor-time helper contracts are normal reachable behavior when public functions rely on `isContract`, `extcodesize`, or `code.length == 0` assumptions
 - EOA-only assumptions are not enough to demote reachability when delegated-EOA or account-abstraction semantics could exercise the same public path
 - Empty-market / first-depositor / share-inflation / donation-boosted bootstrap states are normal reachable behavior if the protocol can launch or interact while depth is near zero
 - Direct underlying donation into a collateral market is normal reachable behavior if the market contract can receive the token and exchange-rate logic reads raw balance without minting offsetting shares
@@ -124,6 +133,7 @@ Prove an unprivileged actor executes the attack.
 - A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
 - A single harmless sample does **not** refute approximation bias, midpoint/average pricing, or micro-edge compounding on a nonlinear curve; repeated iterations and callback-loop execution must be checked
 - Unprivileged actor triggers profitably → **clears**, continue
+- If the protocol's intended restrictions live only in `transfer()`, treat standard router `transferFrom()` flow as the default public trigger path unless the code explicitly overrides or re-routes it
 - If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
 - If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
 - If a helper/router/vault/distributor performs the real swap or payout, the helper's live balances, approvals, and recipients are part of the same trigger analysis
@@ -175,6 +185,36 @@ For Compound-style or exchange-rate-backed lending markets, ask:
 
 If these questions were not checked, attacker profitability for Compound/Venus-style collateral markets is **not confirmed**.
 
+## Gate 3.56A — Donation / Exchange-Rate Inflation Check
+
+For lending markets, ERC4626 vaults, wrappers, or share-priced collateral systems, ask:
+
+- Can an attacker transfer underlying directly to the market / vault / wrapper contract without calling the formal `deposit`, `mint`, or `supply` path?
+- Does that direct transfer increase any of:
+  - `cash`
+  - `totalAssets`
+  - exchange rate
+  - share price
+  - collateral value
+  - redeemable value
+- Does the direct transfer avoid:
+  - supply-cap / deposit-cap enforcement
+  - mint accounting
+  - share issuance
+  - debt/accounting normalization
+- Does the system price shares, collateral, or borrow power from raw passive balances such as `IERC20(asset).balanceOf(address(this))`, `getCash`, or equivalent?
+- Can the attacker then use the inflated value to:
+  - borrow more assets
+  - redeem excess assets
+  - distort liquidation math
+  - bypass collateral constraints
+  - extract protocol value
+- Is realizable market liquidity materially lower than the inflated onchain collateral value?
+
+If the answers to the first four bullets are yes, this is a donation-inflation candidate.
+If the borrow / redeem / liquidation distortion path is also yes, it must be reported as a finding, not a lead.
+Do not dismiss this as “supported behavior” if passive donations can increase collateral/share value without minting offsetting shares.
+
 ## Gate 3.57 — Reserve Bucket Check
 
 For reserve-priced mint/burn/swap/treasury systems, ask:
@@ -200,6 +240,7 @@ For token / AMM systems that can touch pair balances, ask:
 - Can a public caller force a helper / mining / rewards / maintenance contract to execute the pair-burn path even if the final burn function itself is role-gated?
 - Can any sentinel recipient/sender such as `address(0)`, dead address, pair, router, staking contract, treasury, or distributor bypass a guarded buy/sell/fee branch through an early return or special-case path?
 - Does the protocol consume stale global pending state (fee bucket, burn debt, cached reserve mutation) before the current user's action is accounted, letting the attacker choose the current action to exploit the already-mutated reserves?
+- Does one public call create a global queued state while a later unrelated public call realizes it against the pair / vault / market, especially when the realizing caller can be a fresh constructor-time helper?
 - After realistic flashloan size, taxes, fees, and slippage, does collapsing the token-side reserve leave the opposite reserve profitably drainable?
 - If queue creation, public/helper realization, pair-side destruction, `sync()`, and monetization are all source-reachable, rank the issue as a primary public exploit rather than splitting it into separate medium-severity component findings
 

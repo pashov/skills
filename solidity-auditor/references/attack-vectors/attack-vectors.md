@@ -259,6 +259,26 @@
 - **D:** Shares redeemed at projected end-of-term rate rather than current realized rate. Early redeemers take more than proportional share — late redeemers find vault depleted.
 - **FP:** Redemption uses current realized rate (`totalAssets() / totalSupply()`). Withdrawal queue enforces proportional access. Early redemption penalty applied.
 
+**52A. Custom `transfer()` Policy Bypassed Through Inherited `transferFrom()`**
+
+- **D:** Token implements buy/sell/fee/anti-bot logic only in `transfer()` but leaves `transferFrom()` and `_transfer()` inherited. Standard router sells, LP adds, permit flows, and allowance-based helper paths use `transferFrom()` and therefore bypass the advertised restrictions.
+- **FP:** Core policy is enforced in `_transfer()` or both `transfer()` and `transferFrom()` route through the same checked internal function.
+
+**52B. Deferred Global State Consumed By Later Unrelated Transfer**
+
+- **D:** One public action writes a global pending bucket (`pendingBurn`, fee debt, queued reserve mutation, cached payout, burn debt), and a later unrelated public action consumes that bucket against shared reserves, balances, or accounting without proving the same actor or same economic action should bear it.
+- **FP:** Queued state is isolated per-user / per-position / per-order, or the realizing path proves the same record and same actor are being settled atomically.
+
+**52C. Constructor-Time `isContract` / `extcodesize` Anti-Bot Bypass**
+
+- **D:** Contract relies on `isContract`, `extcodesize`, or `code.length == 0` to block contract callers, but a helper contract can call during construction while code size is still zero and therefore bypass the restriction.
+- **FP:** No security-critical branching depends on code-size checks, or the guarded path is additionally authenticated by a robust capability that constructor-time callers cannot satisfy.
+
+**52. Donation Attack / Exchange-Rate Inflation**
+
+- **D:** Lending market, ERC4626 vault, wrapper, or share-priced collateral system derives exchange rate / NAV / collateral value from raw passive balances such as `IERC20(asset).balanceOf(address(this))`, `getCash`, or `totalAssets`. Supply/deposit caps are enforced only on formal `deposit` / `mint` / `supply` paths. Attacker mints a position normally, then donates underlying directly to the contract without minting new shares, inflating exchange rate and borrow/redeem power.
+- **FP:** Accounted assets are tracked separately from raw passive balances. Unsolicited donations are ignored or swept out of exchange-rate/collateral math. Direct donations mint offsetting shares or otherwise cannot increase borrow/redeem power.
+
 **52. Rounding in Favor of the User**
 
 - **D:** `shares = assets / pricePerShare` rounds down for deposit but up for redeem. Division without explicit rounding direction. First-depositor donation amplifies the error.

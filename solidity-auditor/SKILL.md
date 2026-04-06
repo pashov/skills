@@ -68,7 +68,10 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - if a value-out path uses a raw external call, token transfer hook, router call, LP removal, or native coin send before invalidating the authorizing record, treat it as a top-priority reentrancy candidate immediately
      - **Assumption inversion**:
        - what assumptions the code appears to rely on
+       - whether custom policy logic lives only in `transfer()` while `transferFrom()` or `_transfer()` remains inherited or differently guarded
+       - whether standard router / allowance / permit / helper flows therefore bypass the advertised trading or fee logic
        - what happens if caller is a contract instead of an EOA
+       - what happens if the caller is a contract in construction, where `extcodesize` / `code.length` may still be zero
        - what happens if the caller is an EOA using delegated code / account-abstraction semantics (including EIP-7702-style behavior) rather than a plain legacy wallet
        - what happens if the call arrives through a trusted forwarder and the code mixes `msg.sender` with `_msgSender()`
        - what happens if a forwarder-aware contract composes with a non-forwarder-aware token or helper, so allowance owner, burned account, callback user, credited account, refund recipient, and payout recipient can diverge
@@ -81,6 +84,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - claim before settle
        - settle before register
        - deposit then burn then claim
+       - poison global pending state in one call, then realize it from a later unrelated call
+       - seed state from one helper address and consume it from a different helper or constructor-time contract
        - receive ETH directly
        - transfer NFT directly
        - repeat tiny actions many times
@@ -110,6 +115,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether a later function restores accounting only after the pricing or payout step has already consumed the corrupted reserve state
        - whether a profitable loop exists of the form `mint/buy -> sync/update -> burn/sell -> repeat`
      - **LP reserve destruction / pair-burn checks**:
+       - whether the intended sell / buy / fee / anti-bot policy is attached only to `transfer()` while normal router flow uses `transferFrom()`
+       - whether a public actor can use `transferFrom()` or other inherited paths to source inventory, bypass fees, or avoid trading restrictions before or after the pair-burn step
        - whether any public transfer hook, sell hook, pending-burn variable, fee bucket, or maintenance path can burn tokens directly from the LP/pair address
        - whether the amount burned from the pair is fed by public user flow such as sells, transfers, or swaps rather than privileged-only admin calls
        - whether the contract calls `sync()` after burning pair inventory, making the reserve distortion immediately exploitable
@@ -119,6 +126,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether any apparently privileged pair-burn / extraction path is reachable from a public upstream trigger such as `claim`, `distribute`, `process`, `harvest`, `rebalance`, `withdraw`, router flow, or keeperless maintenance call
        - whether attacker inventory can be sourced indirectly through router-held output, pair-to-router transfers, router-mediated liquidity removal, helper custody, or any sentinel-address branch even when direct buys are blocked
        - whether the review produced a full exploit chain covering `inventory source -> queued reserve mutation -> public/helper realization -> sync/update -> final extraction leg`
+       - whether constructor-time helpers can bypass `isContract` / `code.length` anti-bot checks and act as the realization leg for a queued reserve mutation
        - whether a simpler direct bug elsewhere in the codebase is distracting from a stronger reserve-burn exploit; pair-burn plus `sync()` must still be completed and ranked if the trigger chain remains live or unresolved
      - **Morpho / MetaMorpho / lending-vault checks**:
        - whether the vault or wrapper allocates into underlying markets that can be empty or near-empty
@@ -337,7 +345,23 @@ Before bundling, expand the audit scope and write a hotspot checklist:
    - Test recursive loops such as `borrow -> swap -> donate to collateral market -> borrow again`.
    - Record whether bad debt remains after liquidation or only appears transiently during the loop.
 
-6. **Transient reserve-desync checklist is mandatory for reserve-priced systems.**
+6. **Donation / exchange-rate inflation checklist is mandatory for lending, vault, and wrapper systems.**
+   - Before clearing any lending market, ERC4626 vault, wrapper, cToken/vToken-style market, or share-priced collateral system, identify and record:
+     - where formal deposits / mints / supplies are accounted
+     - where caps are enforced
+     - where exchange rate / NAV / collateral value is computed
+     - whether those computations use raw passive balances such as `IERC20(asset).balanceOf(address(this))`, `getCash`, or `totalAssets`
+     - whether direct underlying transfers can reach the contract without minting offsetting shares
+   - Explicitly test and note:
+     - passive-donation path: `direct transfer -> priced assets increase -> share count unchanged`
+     - whether supply caps or deposit caps are enforced only on formal mint/deposit paths
+     - whether borrow power, redeemable value, or liquidation math trusts the inflated exchange rate
+     - whether the exploit requires an empty market, or only a pre-existing share position plus a large donation
+     - whether a loop exists of the form `deposit/mint -> donate underlying -> borrow/redeem -> repeat`
+     - whether realizable market liquidity is materially below the inflated onchain collateral value
+   - If passive donations can increase exchange rate or collateral value without minting offsetting shares, treat that as a first-class exploit candidate and complete the extraction path before clearing the system.
+
+7. **Transient reserve-desync checklist is mandatory for reserve-priced systems.**
    - Before clearing any reserve-priced bonding-curve, AMM-like, mint/burn, or legacy treasury system, identify and record:
      - the storage variables that represent priced reserve versus locked / unsellable / treasury reserve
      - every public function or selector that mutates those variables
@@ -349,7 +373,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether final end-of-tx storage looks consistent even though the intermediate pricing state was corrupted
      - whether a deferred maintenance path such as `distribute`, `process`, `harvest`, `rebalance`, `claim`, or mining/reward distribution can be called by an unprivileged user and thereby realize the corrupting reserve mutation on demand
    - Treat “restored by end of tx” as irrelevant if value can be extracted during the temporary bad state.
-7. `{bundle_dir}/source.md` — a short `# Audit Scope` section listing the expanded source set, then a `# Discovery Checklist` section, then a `# Pricing / Invariant Hotspots` section capturing the checklist above, then ALL expanded in-scope `.sol` files, each with a `### path` header and fenced code block.
+8. `{bundle_dir}/source.md` — a short `# Audit Scope` section listing the expanded source set, then a `# Discovery Checklist` section, then a `# Pricing / Invariant Hotspots` section capturing the checklist above, then ALL expanded in-scope `.sol` files, each with a `### path` header and fenced code block.
 8. Agent bundles = `source.md` + agent-specific files:
 
 | Bundle               | Appended files (relative to `{resolved_path}`)                                                                  |
