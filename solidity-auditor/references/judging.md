@@ -28,6 +28,7 @@ Before Gate 1, discovery must also answer:
 - what non-standard path is being tested
 - whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
 - whether every external dependency on the value path was actually analyzed, rather than being left as an unresolved “external contract” note
+- whether live proxy addresses and implementation contracts were resolved when the user supplied them or when they were discoverable from deployment context
 - whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
 - whether a contract uses one security-critical path for `transfer()` but leaves `transferFrom()` or `_transfer()` inherited, allowing router / allowance / permit flows to bypass the advertised policy layer
 - whether constructor-time callers can evade `extcodesize` / `code.length` / `isContract` checks and thereby reach a path that would block an already-deployed contract
@@ -53,6 +54,8 @@ Before Gate 1, discovery must also answer:
 - whether a deferred `pendingBurn`, fee bucket, reward bucket, burn debt, or similar queued mutation can be realized by a separate public helper / mining / distributor / maintenance entrypoint
 - whether one user-controlled action can write a global queued state and a later unrelated user-controlled action can consume that same state against shared reserves, balances, or accounting buckets
 - whether any external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, or selector-only low-level call remains unresolved even though it sits on a deposit / withdraw / mint / burn / claim / liquidation / settlement path
+- whether the same mutable price source is used to create a claim in one arithmetic direction and redeem it later in the opposite direction, such as `deposit/mint: amount * price` and `withdraw/redeem: claim / later_price`, or the inverse
+- whether any supplied tx hash, block number, trace, or RCA was used only as corroboration for a source-derived exploit path rather than as a substitute for source analysis
 - whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
 - for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
   - inventory source
@@ -111,6 +114,8 @@ Prove the vulnerable state exists in a live deployment.
 - Cross-contract `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `router`, `distributor`, and helper contracts actually called on the value path are the same exploit surface, not an optional dependency review
 - If execution price, reserve updates, or invariant enforcement are delegated, those delegated files are the critical path even when the named wrapper looks safe in isolation
 - If a critical external dependency could not be analyzed because source is missing or tooling failed, do not silently clear the path; keep the audit explicitly incomplete on that family
+- If the user supplied live addresses or deployment context that makes the dependency fetchable, failure to fetch the implementation/source is a tooling gap to report explicitly, not a reason to stop at the wrapper
+- If optional corroborating material matches the cross-contract source path and no concrete guard refutes it, do not reject or demote solely because the bug spans multiple contracts
 - If the exploit depends on configurable parameters or reserve ratios, test reachable defaults, allowed config bounds, and normal reserve skews before rejecting
 - If the system is a fork of a known protocol, do not reject inherited issue classes until the source diff proves the critical invariant changed
 - For live audits, verify the actual onchain config values before treating a code bug as active
@@ -140,6 +145,7 @@ Prove an unprivileged actor executes the attack.
 - If the protocol's intended restrictions live only in `transfer()`, treat standard router `transferFrom()` flow as the default public trigger path unless the code explicitly overrides or re-routes it
 - If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
 - If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
+- If optional corroborating material matches the call chain plus arithmetic in source, that is supporting trigger evidence even when some dependencies were fetched from explorers rather than the local repo
 - If a helper/router/vault/distributor performs the real swap or payout, the helper's live balances, approvals, and recipients are part of the same trigger analysis
 - If a helper/mining/distributor contract is the public trigger that realizes a deferred reserve mutation on the token or pair, treat that helper as part of the same exploit path rather than as a separate privileged dependency
 - If source-backed code proves queue creation, pair-side realization, and reserve refresh, do not demote solely because the upstream helper contract is decompiled or unverified; instead lower confidence only to the extent that the public trigger remains uncertain
@@ -164,6 +170,17 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
 
 If reserve depth, threshold reachability, and realistic round-trip costs were not checked, attacker profitability is **not confirmed**.
+
+## Gate 3.51 — Price-Path Asymmetry Check
+
+For pricing-, share-, receipt-, or claim-based systems, ask:
+
+- Does deposit/mint/credit logic read a price path and transform user input by multiplying or dividing through that price?
+- Does withdraw/redeem/burn/settlement logic later read the same price path again and apply the inverse arithmetic direction to the stored claim, share, or receipt?
+- Can that price path move within the same transaction, same multicall, or same short exploit loop through AMM state, oracle update cadence, helper calls, or flash-loanable liquidity?
+- If the user supplied corroborating trace data or an RCA, do the code-level formulas reproduce the supplied arithmetic at the cited prices and amounts?
+
+If the answers show the same mutable price source is used asymmetrically across mint and redeem, treat this as a first-class exploit candidate and finish the extraction analysis before clearing the system.
 
 ## Gate 3.55 — Reserve Index Check
 
@@ -372,6 +389,7 @@ Before finalizing leads, promote where warranted:
 - **Cross-contract echo.** Same root cause confirmed as FINDING in one contract → promote in every contract where the identical pattern appears.
 - **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75.
 - **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, description only.
+- **Corroborated arithmetic match.** If optional supporting material matches the source-level call chain and arithmetic and no concrete refutation survives Gate 1, treat that as supporting evidence; do not require it, and do not leave a source-complete cross-contract exploit as an unresolved lead.
 - **Parameter-sensitive economics.** If the source trace is complete and the only open question is which reachable configuration or reserve regime turns it profitable, do not reject on one default sample. Demote to LEAD only after searching the reachable parameter space.
 - **Threshold-sensitive economics.** If the source trace is complete and the only open question is whether a whale/flashloan can wake a dormant thresholded path, do not reject until that threshold reachability is checked.
 - **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
