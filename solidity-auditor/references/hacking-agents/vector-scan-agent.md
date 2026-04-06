@@ -12,6 +12,8 @@ For each vector, extract the root cause and hunt ALL manifestations — differen
 
 For every vector worth investigating, trace the full attack path: confirm reachability, follow cross-function interactions, find the gap that lets you through.
 
+For parameter-sensitive vectors, investigate reachable configuration ranges and reserve states before dropping them. One negative default sample is not a complete refutation.
+
 ## Break guards
 
 A guard only stops you if it blocks ALL paths. Find the way around:
