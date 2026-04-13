@@ -67,6 +67,19 @@ Before bundling, expand the audit scope and write a hotspot checklist:
 
 2. **Discovery phase is mandatory before validation.**
    - Before spawning agents, build a `# Discovery Checklist` that explicitly records:
+     - **Lending / market enumeration pass**:
+       - if the target is a lending market, money market, CDP, vault-router, reserve protocol, or fork/near-fork of Aave, Compound, Morpho, Euler, Maker, Venus, Radiant, Silo, or similar systems, enumerate **all** pools / markets / reserves before narrowing to one path
+       - enumerate every pool, market, reserve, collateral type, debt asset, wrapper token, debt token, interest-rate strategy, configurator, provider, oracle source, data provider, and reserve registry on the active path
+       - treat each market/config pair as a distinct attack surface even when implementations are shared
+       - explicitly record zero-supply, dust-supply, zero-debt, dust-debt, newly-listed, paused, frozen, isolated, siloed, or cap-constrained markets as top-priority exploit candidates rather than edge cases to skip
+       - record per market:
+         - underlying asset and decimals
+         - collateral enabled / disabled
+         - borrow enabled / disabled
+         - supply cap / borrow cap / debt ceiling
+         - total supply / total debt / cash / reserves / exchange rate / indexes
+         - oracle source and oracle decimals
+         - wrapper implementation and debt-token implementations
      - **Public surface inventory**:
        - every `external` / `public` state mutator
        - every `payable` function
@@ -84,6 +97,18 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - whether custody is pooled at contract level or segregated per user
          - which external dependencies are called along the value path
        - if a value-out path uses a raw external call, token transfer hook, router call, LP removal, or native coin send before invalidating the authorizing record, treat it as a top-priority reentrancy candidate immediately
+     - **Approval / allowance abuse pass**:
+       - identify every path that can move ERC20 value via `transferFrom`, `permit`, Permit2-style helpers, allowance-consuming routers, vault pull patterns, token sweep helpers, arbitrary call executors, or spender-controlled adapters
+       - record every contract that can become an approval holder or effective spender for user funds, vault funds, pair funds, or third-party funds
+       - for each spender path, verify:
+         - who is assumed to have granted approval
+         - whether the spender can choose `from`, `to`, `token`, or `amount`
+         - whether the code proves that `from` is the caller, the credited owner, or an explicitly authorized account rather than any address with standing allowance
+         - whether approvals granted for one purpose can be reused on another path such as `withdraw`, `sweep`, `rescue`, `claim`, `rebalance`, `router`, `liquidation`, or arbitrary `execute`
+         - whether a contract can pull tokens from any external account or contract that previously approved it, even if that approver is not the current caller
+         - whether a contract-held token balance plus an arbitrary token-withdraw path creates a direct public drain
+         - whether an arbitrary external-call path can be combined with pre-existing approvals to withdraw tokens from users, vaults, routers, pairs, escrows, or helper contracts
+       - if any public or weakly-gated path can withdraw tokens from `address(this)` or from an arbitrary approved `from` address without tightly binding ownership/intent, treat it as a top-priority exploit candidate and complete the full profit chain
      - **Dependency-closure pass**:
        - identify every external contract address stored in state or returned by another contract that is used during deposit, withdraw, mint, burn, claim, settlement, pricing, reward, liquidation, or upgrade logic
        - for each such dependency, record whether it was:
@@ -141,6 +166,17 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether Aave-style `liquidityIndex`, `variableBorrowIndex`, normalized income, or scaled-balance accounting can be manipulated by first pushing reserve liquidity near zero
        - whether scaled mint/burn/withdraw/borrow paths round against attacker-amplified indices in a way that lets tiny deposits or scaled balances support larger withdrawals or borrow power
        - whether a fork inherited Aave-style reserve-index inflation or flashloan-premium amplification issues even if wrapper/periphery diffs look unrelated
+     - **Lending rounding / state-delta checks**:
+       - for every lending market, compare state deltas across `deposit/mint`, `withdraw/redeem`, `borrow`, `repay`, `liquidate`, `accrueInterest`, `mintToTreasury`, `handleRepayment`, `sync`, and reserve update helpers
+       - explicitly test:
+         - first mint into an empty market
+         - first redeem after a direct donation
+         - dust share balances and dust debt balances
+         - full-cash withdraw / redeem
+         - full-debt repay with sentinel values such as `type(uint256).max`
+         - close-factor and liquidation bonus boundaries
+         - same-block index update then withdraw / borrow / liquidate
+       - verify whether any path lets the user receive more assets than burned shares justify, preserve more collateral than repaid debt justifies, or reduce more debt than transferred assets justify because different rounding directions are used across the same path
      - **Reserve bucket / sync checks**:
        - whether the protocol tracks more than one balance bucket such as priced reserve, locked reserve, claimable reserve, treasury reserve, or raw contract balance
        - whether any public `sync`, `reconcile`, `refresh`, `skim`, `settle`, `updatePoolBalance`, or unlabeled selector-style function rewrites one reserve bucket from raw `address(this).balance` or token balance
@@ -234,6 +270,12 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - full-cash redeem / withdraw
          - full claim / withdraw / unlock then repeat the same call on the same id
          - `type(uint256).max` / sentinel-value branches
+       - explicitly test allowance-sensitive variants:
+         - caller pulls from itself
+         - caller pulls from a different approved account
+         - caller pulls from a contract that has approved the protocol/helper/router
+         - caller routes payout to a different receiver after pulling from an approved third party
+         - permit / meta-tx / forwarder flow where signer, `msg.sender`, `_msgSender()`, payer, owner, and receiver differ
          - first-user / tiny-supply / tiny-share states
        - explicitly test transient-state variants:
          - mutate reserve/accounting state with a public sync/update function
@@ -282,6 +324,10 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - if a later path shows public pair-balance destruction, deferred pair-burn realization, or reserve mutation followed by `sync()`, rank that exploit above softer accounting, DoS, or owner-takeover issues unless the user explicitly asked for a different emphasis
        - if the code exposes all pieces of an exploit chain across different files or helper contracts, the audit is not complete until those pieces are synthesized into one end-to-end attack path or concretely disproven
        - for lending systems specifically, do not finalize before checking at least:
+         - complete pool / market / reserve enumeration
+         - empty-market / thin-market / first-depositor cases
+         - exchange-rate / index / donation inflation cases
+         - rounding and state-delta checks on thin markets
          - supply / deposit
          - withdraw / redeem
          - borrow

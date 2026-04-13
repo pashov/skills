@@ -70,6 +70,11 @@ One Read call per file. Do NOT read README, docs, or foundry.toml (already read 
 
 **Extract per file:** contract type & inheritance, roles & access control, value-holding state vars, external calls, fund flows, invariant comments, assert/require, backwards-compatibility indicators (see below).
 
+While extracting facts, also record approval-sensitive surfaces:
+- any `transferFrom`, `permit`, Permit2-style flow, allowance-consuming router/helper, token sweep/rescue path, arbitrary external call executor, or spender role
+- whether the contract can pull from `address(this)` only, or from arbitrary approved external accounts/contracts
+- whether `from`, `to`, token, recipient, or spender are user-controlled
+
 ### Path B: >20 source files (parallel subagents)
 
 **Tier 1 — Small files (≤120 lines):** Batch into single Bash `cat` call.
@@ -87,6 +92,7 @@ For EACH file, return this exact format:
 - **State vars (value-holding)**: [mappings/vars that hold balances, collateral, etc.]
 - **External calls**: [calls to other contracts, ERC20 transfers, etc.]
 - **Fund flows**: [deposit/withdraw/mint/burn/transfer paths]
+- **Approval surfaces**: [transferFrom/permit/allowance/permit2/sweep/rescue/arbitrary pull paths]
 - **Invariants**: [require/assert statements, NatSpec invariant comments]
 - **Key logic**: [1-2 sentences on what the contract does]
 - **Function-level access map** (REQUIRED for contracts, skip for libraries):
@@ -141,6 +147,7 @@ Note: `nonReentrant` alone is NOT access control. `initializer`/`reinitializer` 
 - Call chain: trace downstream calls using subagent summaries + function-level access maps. Format: `→ Contract.fn() → Contract.fn()`
 - State modified: which storage vars/mappings change
 - Value flow: `in` (tokens deposited), `out` (tokens withdrawn), `none`
+- Approval holder / spender assumptions: who must have approved whom, and whether the function can pull from arbitrary previously-approved addresses
 - Reentrancy guard: yes/no
 
 This data feeds TWO outputs:
@@ -196,6 +203,24 @@ Integrate into: **Actors table** (Capabilities column should be specific about w
 ### Step 2e: Protocol Classification
 
 After reading source, classify the protocol following the procedures in `references/threats.md` (type detection + hybrid classification, phase detection, and external call classification — all in one file).
+
+If the protocol is lending-like, reserve-based, CDP-like, or a fork/near-fork of Aave, Compound, Morpho, Euler, Maker, Venus, Radiant, Silo, or similar systems, you must also enumerate the market topology before writing the report:
+- every pool / market / reserve / collateral type / debt asset
+- every wrapper token and debt token
+- every provider / configurator / registry / data provider
+- every oracle source and rate strategy
+- whether markets share implementations but differ by config, cap, oracle, or pause state
+- which markets are empty, dust-sized, newly listed, paused, frozen, isolated, siloed, or otherwise thin
+
+Surface that topology explicitly in `x-ray.md` and `architecture.json`. Do not summarize a lending protocol as a single pool when multiple markets or reserves exist.
+
+For any protocol type, also enumerate approval topology before writing the report:
+- every contract that can hold user approvals or third-party approvals
+- every path that can withdraw tokens from `address(this)` or from an arbitrary approved `from` address
+- every router/helper/executor that can reuse standing approvals across multiple actions
+- whether approvals are tightly bound to caller ownership and intended receiver, or whether arbitrary approved accounts/contracts are pullable
+
+Surface that approval topology explicitly in `x-ray.md`, `architecture.json`, and `entry-points.md` whenever such paths exist.
 
 ### Step 2f: nSLOC
 
