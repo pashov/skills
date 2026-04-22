@@ -103,6 +103,7 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 [Sorted by priority score (protocol-type relevance + git hotspot + fix history + late changes + dangerous area churn). NOT alphabetical.]
 [These are suggestions for where to focus — brief pointers, not full attack writeups. The auditor decides severity and builds attack paths.]
 [No RISK labels (HIGH/MEDIUM/LOW). No mitigation analysis. No git evidence per surface.]
+[Priority override: if a public or unresolved path can destroy / move inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh reserves, list that surface first unless a stronger public cash-out path is already confirmed.]
 
 - **[Surface name]** — [1-2 sentences: what makes this area interesting and which contracts/functions are involved]
 
@@ -559,4 +560,3 @@ Then `Read` the PNG. If no renderer is available, skip the validation loop.
 ```bash
 rm -f x-ray/architecture.json x-ray/git-security-analysis.json /tmp/architecture-preview.png
 ```
-

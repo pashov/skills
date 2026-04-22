@@ -140,6 +140,7 @@ Prove an unprivileged actor executes the attack.
 - If the value is redirected to protocol treasury / feeRecipient / owner rather than the caller, this is **not** outsider profit unless attacker control or collusion is proven
 - Costs exceed extraction → **REJECTED** only after evaluating realistic repeated execution and compounding, not just a single iteration
 - A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
+- A single loss-making sample at one parameter point is not enough to reject a pair-burn / reserve-destruction exploit with a complete source-level trace
 - A single harmless sample does **not** refute approximation bias, midpoint/average pricing, or micro-edge compounding on a nonlinear curve; repeated iterations and callback-loop execution must be checked
 - Unprivileged actor triggers profitably → **clears**, continue
 - If the protocol's intended restrictions live only in `transfer()`, treat standard router `transferFrom()` flow as the default public trigger path unless the code explicitly overrides or re-routes it
@@ -163,6 +164,7 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - What are the live reserves and balances?
 - How large is the forced move relative to those reserves?
 - What are the round-trip costs from swap fees, token taxes, slippage, and price impact?
+- Was attacker-controlled size space explored beyond one default sample?
 - Does the edge only become positive after repeated iterations rather than a single round trip?
 - Is the pricing function exact, or is it a midpoint / average / interpolated / cached approximation of a nonlinear curve?
 - Do reserve updates use gross input while output pricing uses net-after-fee input, or any other mismatched effective amount?
@@ -263,6 +265,9 @@ For token / AMM systems that can touch pair balances, ask:
 - Does the protocol consume stale global pending state (fee bucket, burn debt, cached reserve mutation) before the current user's action is accounted, letting the attacker choose the current action to exploit the already-mutated reserves?
 - Does one public call create a global queued state while a later unrelated public call realizes it against the pair / vault / market, especially when the realizing caller can be a fresh constructor-time helper?
 - After realistic flashloan size, taxes, fees, and slippage, does collapsing the token-side reserve leave the opposite reserve profitably drainable?
+- Was attacker-controlled sizing explored beyond a single fixed-size round trip, including buy size, sell size, threshold-crossing size, and flashloan bankroll?
+- If the first tested round trip is loss-making, does the source still allow a different sequence such as `large buy -> pair-side burn to dust -> sync -> dump`, or `queue in one call -> realize in another`, that must be checked before demotion?
+- If the user supplied a tx hash, trace, or incident context for this same pair/reserve path, was the source arithmetic reconciled against that live evidence before clearing or demoting the issue?
 - If queue creation, public/helper realization, pair-side destruction, `sync()`, and monetization are all source-reachable, rank the issue as a primary public exploit rather than splitting it into separate medium-severity component findings
 
 If these questions were not checked, attacker profitability for pair-burn / LP-reserve-destruction systems is **not confirmed**.
@@ -399,6 +404,8 @@ Before finalizing leads, promote where warranted:
 - **Transient reserve economics.** If the source trace shows a public sync/update path can temporarily reclassify locked or unsellable funds into the priced reserve, do not demote it to “eventual consistency” until a same-tx `sync -> burn/sell/redeem` extraction loop has been checked.
 - **Pair-burn economics.** If the source trace shows public user flow feeds a pending burn bucket or other path that can burn LP/pair inventory and then `sync()`, do not demote it to “tokenomics” until `buy -> hook -> pair-burn -> sync -> opposite-reserve extraction` has been checked.
 - **Pair-burn trigger-chain economics.** If the final pair-burn function looks privileged but a public caller may trigger it indirectly through rewards, mining, fee processing, harvesting, distribution, rebalancing, or router-maintenance flow, do not demote it until that upstream trigger chain is either proved blocked or completed end-to-end.
+- **Pair-burn sizing economics.** If the first simulated round trip is loss-making, do not demote the issue until attacker-controlled sizing has been searched for the regime where pair-side burn dominates remaining token reserves after the buy leg.
+- **Pair-burn corroboration.** If the user supplied a tx hash or live incident on the same path and the source trace is compatible, do not leave the issue as a lead without reconciling the trace arithmetic against source.
 - **Priority rule for reserve destruction.** If a complete or unresolved public pair-burn plus `sync()` exploit chain exists, do not let easier direct drains, stale-accounting bugs, or pure DoS findings outrank it unless they are strictly stronger public cash-out paths.
 - **Sentinel-bypass economics.** If the source trace shows an early return or special-case branch for `address(0)`, dead address, pair, router, staking, treasury, or distributor, do not demote it to “edge case” until buy/sell/claim bypass and exact exploit-sequence variants have been checked.
 - **Stale-global-state economics.** If the source trace shows stale pending state is consumed before the current user action is accounted, do not stop at the bug family; complete one exact exploit sequence showing how the attacker chooses amount/recipient/order to realize the skew.

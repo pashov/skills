@@ -204,6 +204,9 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether the review produced a full exploit chain covering `inventory source -> queued reserve mutation -> public/helper realization -> sync/update -> final extraction leg`
        - whether constructor-time helpers can bypass `isContract` / `code.length` anti-bot checks and act as the realization leg for a queued reserve mutation
        - whether a simpler direct bug elsewhere in the codebase is distracting from a stronger reserve-burn exploit; pair-burn plus `sync()` must still be completed and ranked if the trigger chain remains live or unresolved
+       - do not clear or demote a public pair-burn / reserve-destruction path from one negative fixed-size round-trip sample; vary buy size, sell size, threshold-crossing size, flashloan bankroll, helper path, and multi-step sequence before concluding the path is uneconomic
+       - if the source path can shrink the token-side reserve toward dust and then trade against the refreshed reserve ratio, explicitly test the "buy enough to make the later pair-burn dominate remaining token reserves, then dump" sequence rather than only symmetric buy/sell loops
+       - if a user-supplied tx hash or live trace exists for the same pair, treat it as mandatory corroboration work before final ranking; reconcile the source-level arithmetic against that trace instead of leaving the path as an unresolved lead
      - **Morpho / MetaMorpho / lending-vault checks**:
        - whether the vault or wrapper allocates into underlying markets that can be empty or near-empty
        - whether allocator / curator / owner can route funds into risky long-tail markets before users can react
@@ -591,6 +594,8 @@ Before report formatting, perform a **Critical Surface Completion Review**:
 
    **Do not refute parameter-sensitive pricing bugs with one sample.** If the source trace shows midpoint bias, nonlinear-curve approximation, gross/net accounting mismatch, or repeated-loop compounding potential, a single loss-making simulation at default parameters is not enough to reject. Search reachable configuration ranges, reserve ratios, repeated iteration counts, and callback/multicall loop structures before clearing the finding.
 
+   **Do not refute pair-burn economics with one sample.** If public flow can burn pair inventory and then call `sync()`, a single negative round-trip at one size is not enough to demote the issue. Search attacker-controlled sizing that makes the pair-side burn dominate remaining reserves, include flashloan bankroll and threshold wake-up effects, and test the exact `inventory source -> pair burn -> sync -> opposite-reserve extraction` sequence before clearing or downgrading.
+
    **Optional external corroboration.** If the user supplies supporting artifacts, before clearing or demoting a candidate exploit, explicitly answer:
    - does the source-level call chain match the supplied transaction trace?
    - do the arithmetic formulas in code match the supplied balances / trace values / RCA math?
@@ -603,6 +608,7 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - `[agents: 2+]` does NOT override a concrete refutation — demote to LEAD if refutation is uncertain.
    - No deployer-intent reasoning — evaluate what the code _allows_, not how the deployer _might_ use it.
    - If source-level exploit reconstruction is complete and no concrete code-level refutation survives, do not leave the issue as a dependency-only LEAD merely because some supporting dependencies were fetched from explorers rather than the local repo.
+   - If a public pair-burn / reserve-destruction path remains unresolved after source reconstruction, do not finalize the audit as complete; either complete the economics and trigger analysis or explicitly mark the audit incomplete on that family.
 
 4. **Fix verification** (confidence ≥ 80 only): trace the attack with fix applied; verify no new DoS, reentrancy, or broken invariants (use `safeTransfer` not `require(token.transfer(...))`); list all locations if the pattern repeats. If no safe fix exists, omit it with a note.
 

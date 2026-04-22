@@ -258,6 +258,10 @@ All output files go into the `x-ray/` directory. Write ALL THREE files in a SING
 
 **Writing Section 2 (Threat & Trust Model)** — Follow the structure in the output template. Use `references/threats.md` for threat profiles, temporal threats, and composability threats content (all in one file, already loaded in Step 1). For hybrids, merge: primary adversary list first, then unique secondary threats (de-duplicate overlapping ones).
 
+When writing **Key Attack Surfaces**, apply this priority override:
+- if the code exposes a public or unresolved path that can burn / skim / transfer inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh / finalize reserves, that surface must appear before softer accounting, admin, or DoS surfaces unless a stronger public cash-out path is already confirmed
+- if economics for that reserve-destruction path are not yet fully closed, write it up explicitly as an unresolved primary surface rather than burying it behind easier but lower-impact issues
+
 **Verification rules** (apply during Section 2 writing):
 - **Permissionless entry points**: Use only the grep-verified list from Step 2b. The Step 2b procedure is the source of truth — do not rely on subagent summaries.
 - **Security claims**: Before writing any claim that a security check is missing, incomplete, or bypassable, you MUST trace the actual data flow by reading the relevant code. Specifically: (1) identify all write sites for the variable under question (use Grep), (2) confirm your claim holds against those write sites. Subagent summaries are not sufficient. If you cannot verify, qualify the claim with "could not confirm" rather than stating it as fact.
