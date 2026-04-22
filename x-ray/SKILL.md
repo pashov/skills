@@ -9,6 +9,22 @@ Generate an `x-ray/` folder at the project root containing all output files. Pip
 
 `$SKILL_DIR` = the directory containing this SKILL.md file. Resolve it from the path you loaded this skill from (e.g. if this file is at `/path/to/x-ray/SKILL.md`, then `$SKILL_DIR` = `/path/to/x-ray`).
 
+## Progress tracking (MANDATORY)
+
+Before doing anything else, call TodoWrite with these 3 todos (all `pending`):
+
+1. `Phase 1: Enumerate & measure codebase`
+2. `Phase 2: Read sources, classify entry points, synthesize invariants`
+3. `Phase 3: Write x-ray report files`
+
+Transitions (update via TodoWrite — never batch):
+- Mark Phase 1 `in_progress` immediately, before running `enumerate.sh`.
+- When Step 1's parallel batch returns, in ONE TodoWrite call mark Phase 1 `completed` and Phase 2 `in_progress`.
+- When Step 2 (including 2b–2g) finishes, in ONE TodoWrite call mark Phase 2 `completed` and Phase 3 `in_progress`.
+- After all Step 3 output files are written, mark Phase 3 `completed`.
+
+Rule: exactly one todo is `in_progress` at any time. Status updates happen the moment a phase starts or ends.
+
 ## Step 1: Enumerate & Measure
 
 If the user specifies a path, use it as project root. Otherwise use cwd. If no `.sol` files or `foundry.toml`/`hardhat.config.*` at root, check one level deep.
@@ -52,7 +68,33 @@ The JSON has 7 sections: `repo_shape`, `fix_candidates`, `dangerous_area_changes
 - `$SKILL_DIR/references/threats.md` — threat profiles, temporal threats, composability threats
 - `$SKILL_DIR/references/templates.md` — output template, entry points template, architecture guide
 
-**4. Spec/whitepaper detection** (1 Glob: `**/{whitepaper,spec,design,protocol}*.{pdf,md}` excluding `node_modules/`, `lib/`, `x-ray/`). If spec or design docs are found (max 3, skip user-facing docs like tutorials/READMEs/API refs), include them as Reads in Step 2's parallel message. Extract only: stated invariants, actor definitions, cross-system flows, trust assumptions, economic properties. Tag all spec-derived claims in the report with `(per spec)` so auditors know what is code-verified vs spec-stated.
+**4. Spec/whitepaper detection** (1 Glob: `**/{whitepaper,spec,design,protocol,architecture,overview,README}*.{pdf,md}` excluding `node_modules/`, `lib/`, `x-ray/`, `test/`). Skip user-facing docs (tutorials, API refs, changelogs, contribution guides). Then apply size-aware handling:
+
+- **Path A (≤5 docs, each ≤300 lines):** Include them as Read calls in Step 2's parallel message. Direct reads — no subagent needed.
+- **Path B (>5 docs OR any doc >300 lines):** Launch a single subagent (`model: "sonnet"`) that reads ALL doc files and returns a structured extraction (max 200 lines). Subagent prompt:
+  ```
+  Read each doc file listed below. Extract ONLY security-relevant information into this format:
+  Files: [list of doc file paths]
+
+  Return this exact structure:
+  ### Doc-Stated Global Invariants
+  [Bullet list of every invariant, constraint, or guarantee the docs claim must hold globally across calls. Treated like NatSpec-stated invariants by Step 2g — routed directly to §2 / §3 / §4 of invariants.md by shape, NOT into §1 (Enforced Guards, which is per-call preconditions only).]
+  ### Actor Definitions
+  [Each actor/role with stated permissions and trust level]
+  ### Trust Assumptions
+  [What the protocol assumes about external systems, oracles, admins, users]
+  ### Cross-System Flows
+  [How value/data moves between contracts or external systems]
+  ### Economic Properties
+  [Fee structures, reward mechanisms, tokenomics, bounded parameters]
+  ### Key Design Decisions
+  [Explicit "we chose X over Y because Z" statements]
+
+  Rules: Quote the source doc for each claim. Omit sections with no relevant content. Max 200 lines total.
+  ```
+  Include this subagent in Step 1's parallel message. Its output feeds Step 3 report writing.
+
+For both paths, extract only: doc-stated global invariants, actor definitions, cross-system flows, trust assumptions, economic properties, key design decisions. Tag all spec-derived claims in the report with `(per spec)` so auditors know what is code-verified vs spec-stated. Doc-stated global invariants feed Step 2g's NatSpec routing step — they route to §2 / §3 / §4 of `invariants.md` by shape, NOT to §1 (Enforced Guards).
 
 ALL calls (coverage, git analysis, reference reads, spec glob) MUST appear in the same message. Proceed to Step 2 without waiting for forge coverage.
 
@@ -68,7 +110,7 @@ CRITICAL: Every tool call — Bash, Agent, Read, Grep — MUST be issued in ONE 
 ### Path A: ≤20 source files (direct reads)
 One Read call per file. Do NOT read README, docs, or foundry.toml (already read in Step 1).
 
-**Extract per file:** contract type & inheritance, roles & access control, value-holding state vars, external calls, fund flows, invariant comments, assert/require, backwards-compatibility indicators (see below).
+**Extract per file:** contract type & inheritance, roles & access control, value-holding state vars, external calls, fund flows, invariant comments, assert/require, backwards-compatibility indicators (see below), **delta writes** (per function: storage variables and the symbolic delta applied — e.g. `Δ(totalSupply) = +shares, Δ(balanceOf[msg.sender]) = +shares` — same-basic-block only, no cross-function inference; inherited helpers like OZ `_mint`/`_burn` may be resolved only when their effect on `balanceOf`/`_totalSupply` is semantically unambiguous), **guard predicates** (every `require`/`assert`/`if-revert` that references a storage variable, quoted verbatim with line number; skip guards that reference only function parameters), **enum/one-shot transitions** (every `require(state == X); ...; state = Y` pair, recorded as `X@Lx → Y@Ly` — include one-shot latches like `require(addr == address(0)); addr = concrete`).
 
 ### Path B: >20 source files (parallel subagents)
 
@@ -88,6 +130,12 @@ For EACH file, return this exact format:
 - **External calls**: [calls to other contracts, ERC20 transfers, etc.]
 - **Fund flows**: [deposit/withdraw/mint/burn/transfer paths]
 - **Invariants**: [require/assert statements, NatSpec invariant comments]
+- **Delta writes**: For EACH non-view non-pure function, list storage variables that change and the symbolic delta applied. Use format `Δ(var) = +expr` or `Δ(var) = -expr`. Only report pairs where BOTH writes appear in the same function body with no intervening call to an unknown external contract. Do NOT chase writes through inherited/imported functions unless the semantic effect is unambiguous (OZ `_mint` → `balanceOf` + `_totalSupply` is fine; custom internal helpers are NOT — list those deltas only in the internal helper's own entry). Example:
+  - `deposit()`: `Δ(totalSupply) = +shares`, `Δ(balanceOf[msg.sender]) = +shares`
+  - `borrow()`: `Δ(totalBorrows) = +amount`, `Δ(underlyingBalance) = -amount`
+- **Guard predicates**: Every `require`/`assert`/`if-revert` in the file that references a storage variable. Quote verbatim with line number. Skip guards that reference only function parameters.
+  - `Vault.sol:206`: `require(_fee <= 10, "fee is capped at 0.1%")`
+- **Enum/one-shot transitions**: Every pattern of `require(var == X); ...; var = Y` where `var` is a storage enum, uint, or address. Record as `X@Lx → Y@Ly`. Include one-shot latches like `require(addr == address(0)); addr = concrete`.
 - **Key logic**: [1-2 sentences on what the contract does]
 - **Function-level access map** (REQUIRED for contracts, skip for libraries):
   List every public/external non-view non-pure function with its access control:
@@ -98,18 +146,27 @@ For EACH file, return this exact format:
 
 ### Entry Point Grep Scan (INCLUDED in the same parallel message as source reads)
 
-Launch these two **Bash** calls (not Grep tool — these patterns use PCRE lookaheads which ripgrep doesn't support) in the SAME message as the source file reads above — they are independent and can run concurrently:
+Launch these two **Bash** calls in the SAME message as the source file reads above — they are independent and can run concurrently. Commands use **only POSIX ERE + POSIX character classes** (no `-P` / PCRE, no GNU-only escapes like `\s` `\w` `\b`), so they work identically on GNU grep (Linux/WSL), BSD grep (macOS default `/usr/bin/grep`, FreeBSD), and ripgrep:
 
 ```bash
 # 1. Single-line signatures: function name and visibility on same line
-grep -rnP 'function\s+\w+\s*\([^)]*\)\s+(external|public)(?!.*\b(view|pure)\b)' [src-dir]/ --include='*.sol' | grep -v '/interfaces/' | grep -v '/mock/'
+grep -rnE 'function[[:space:]]+[[:alnum:]_]+[[:space:]]*\([^)]*\)[[:space:]]+(external|public)' [src-dir]/ --include='*.sol' \
+  | grep -v '/interfaces/' | grep -v '/mock/' \
+  | grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'
 ```
 
 ```bash
 # 2. Multiline signatures: visibility keyword on the closing-paren line (covers 90%+ of multiline cases)
-grep -rnP '^\s*\)\s+(external|public)(?!.*\b(view|pure)\b)' [src-dir]/ --include='*.sol' -B5 | grep -v '/interfaces/' | grep -v '/mock/'
+grep -rnE '^[[:space:]]*\)[[:space:]]+(external|public)' [src-dir]/ --include='*.sol' -B5 \
+  | grep -v '/interfaces/' | grep -v '/mock/' \
+  | grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'
 ```
-Combine results from both. The multiline grep is critical — Solidity functions often split parameters across lines, putting `external`/`public` on the `)` line while `function name(` is lines above.
+Combine results from both. The multiline grep is critical — Solidity functions often split parameters across lines, putting `external`/`public` on the `)` line while `function name(` is lines above. The trailing `grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'` is the POSIX-portable substitute for `\b(view|pure)\b`: it drops any line where `view` or `pure` appears as a standalone identifier (surrounded by non-identifier chars or line boundaries), while preserving lines that merely contain `view_param` / `pure_x` identifier substrings.
+
+**Portability guarantees:**
+- `-E`, `-v`, `-r`, `-n`, `-B` → POSIX (2001+) / supported by macOS, FreeBSD, Linux GNU grep, busybox grep, ripgrep
+- `[[:space:]]`, `[[:alnum:]_]` → POSIX character classes, supported by all above
+- `--include='*.sol'` → GNU + macOS BSD grep + ripgrep. Not supported by busybox grep (niche; Alpine minimal); if the skill ever needs to run there, replace `--include='*.sol' [src]/` with `$(find [src]/ -name '*.sol')` passed as arguments.
 
 ALL tool calls (source reads/Bash/subagents, BOTH grep scans) MUST be in ONE message.
 
@@ -201,11 +258,66 @@ After reading source, classify the protocol following the procedures in `referen
 
 Use the exact nSLOC TOTAL from the Step 1 enumerate output (no `~` prefix) in the report header and scope table.
 
+### Step 2g: Invariant Synthesis
+
+Using the delta writes, guard predicates, enum/one-shot transitions, and invariant comments extracted in Step 2 (from direct reads in Path A, or subagent output in Path B), systematically walk the following taxonomy to produce invariant candidates. This is a reasoning pass — no new tool calls needed (except the Grep batch in step 2 Pass B — see below).
+
+**Terminology**: A *guard* is a per-call precondition enforced at a single callsite (e.g., `require(amount >= MIN)`). It is NOT a falsifiable invariant — the code itself guarantees it at that callsite. An *invariant* is a property that must hold globally across any sequence of calls (e.g., "every active position ≥ MIN"). Guards feed §1 of `invariants.md` (Enforced Guards reference) only. Invariants that are *lifted* from guards (see step 2 below) or stated in NatSpec feed §2 / §3 / §4.
+
+**NatSpec routing** (run before the structural walk): For each NatSpec `@invariant` tag or inline comment asserting a global property (e.g., *"totalSupply always equals Σ balances"*, *"fee never exceeds MAX_BP"*, *"only one active epoch at a time"*), route DIRECTLY to §2 (or §3/§4 if the property spans contracts or derives from multiple primitives) by category shape (Conservation / Bound / Ratio / StateMachine / Temporal). Source tag: `NatSpec: Contract.sol:LN`. Do NOT place developer-stated global invariants in §1 — §1 is per-call guard predicates only. After routing, still run the structural scans below — they may confirm (On-chain=Yes) or contradict (On-chain=No) the NatSpec claim.
+
+**Walk order** (each step uses the raw extraction data, not prior-step conclusions):
+
+1. **Conservation scan**: For each function, find delta-write pairs where `Δ(A) = +expr` and `Δ(B) = -expr` (or `Δ(B) = +expr` for a mapping counterpart) in the same function body. Each matched pair is a conservation candidate: `A + B = const` or `A == Σ B[key]`.
+   - For mapping writes (`mapping[key] += e` paired with `scalar += e`), infer `scalar == Σ mapping[key]`. Verify the pattern holds across ALL functions that write to either variable — if ANY function writes to one without the other, note the gap as "partial conservation" and split into Yes/No rows.
+   - For transfer patterns (`mapping[from] -= e`, `mapping[to] += e` with no scalar change), confirm the mapping sum is self-conserving.
+   - **Negative conservation** (important): If a function that *ought* to track a flow (e.g., flashloan pull/push, receive/forward) has zero storage Δ, record this as a Conservation-negative finding. Absence of Δ is itself an invariant observation.
+
+2. **Guard extraction and lift** (two passes over each `require`/`assert`/`if-revert`):
+
+   **Pass A — Extract verbatim (Enforced Guards reference)**: Every `require`/`assert`/`if-revert` becomes a `G-N` row in §1 of `invariants.md`. Quote the predicate verbatim with source location. This is a mechanical dump of per-call preconditions — not falsifiable, not fuzzed. Skip guards that only reference function parameters with no storage tie-back AND have no global implication (pure local input validation with no audit value beyond Pass B).
+
+   **Pass B — Lift to global property, then check all write sites**: For each guard, ask: *"does this imply a property that must hold across any sequence of calls, not just at this callsite?"*
+   - If **NO** (the guard only constrains a transient parameter that is consumed by the function and does not tie to persistent storage) → leave in §1 only. Do not promote.
+   - If **YES** (the guard implies a persistent property — e.g., `require(amount >= MIN)` at deposit implies "every active position ≥ MIN"; `require(_fee <= 10)` at setter implies "fee ∈ [0, 10]") → rewrite the guard as a global property, then locate ALL write sites of the constrained storage variable using Grep on the variable name across scope files. Batch ALL write-site Greps for all lifted guards into a SINGLE parallel message — do not verify one at a time:
+     - If **ALL write sites** enforce an equivalent guard → promote to §2 as a Bound invariant with On-chain=**Yes**. Derivation: cite the guard + confirm all write sites.
+     - If **ANY write site** writes the variable without an equivalent guard → promote to §2 as a Bound invariant with On-chain=**No**, and cite the unguarded write site(s) as the gap. **This is the high-signal output** — the gap is simultaneously an invariant and a potential bug.
+
+   Include setter-level bounds where a setter writes to a storage variable constrained by its own parameter check. Run the same all-write-site check — if multiple setters write the same variable but only some enforce the bound, the property is On-chain=No.
+
+3. **Ratio scan**: For each storage write of form `A = B * C / D` where B, C, D are storage variables or function-scoped snapshots of storage, record the ratio. Note whether the snapshot is taken before or after other state changes in the same function (ordering matters — e.g., `totalSupply` snapshotted before `_burn` vs after).
+
+4. **State machine / one-shot scan**: For each enum/uint/address variable in `require(var == X); ... var = Y` patterns, record the transition. Distinguish:
+   - **One-shot latch**: `require(var == default); var = concrete` with no path back (e.g., `setStrategy`, `setLeverager`).
+   - **Togglable flag**: `require(var == false); var = true` but another function flips it back (e.g., `freeze/unFreeze`, `toggleVaultLeverage`). NOT a state machine invariant — skip.
+   - **Cyclic state**: `false → true → false` driven by timing/condition (e.g., `ongoingVestingPosition`). Record as a cycle invariant.
+
+5. **Temporal scan**: For each `block.timestamp` or `block.number` comparison involving a storage variable (deadline, lastUpdate, lockPeriod, interval), extract the temporal constraint. Note whether the constraint is checked-then-updated (safe) or updated-then-checked (potential stale read).
+
+6. **Cross-contract scan**: For each external call where the return value is used in arithmetic or a storage write, record what the caller assumes. Then find the callee's write sites for that state. If the callee can change it independently (via another function), the assumption is unvalidated — record as a cross-contract invariant with On-chain=No. ONLY include rows where BOTH sides (caller assumption + callee write sites) are inside the scope files. Do not speculate about out-of-scope contracts.
+   - Also include: **setter-vs-invariant mismatches** — where an admin setter writes a storage value without checking that existing invariants still hold (e.g., `setReserveCapacity` without checking against current liquidity). These are cross-contract in the sense that the setter is one contract/function and the invariant is enforced elsewhere.
+
+7. **Economic derivation**: After steps 1-6, check if any combination of single-contract + cross-contract invariants implies a higher-order property. Each economic invariant must cite the specific I-N / X-N IDs it derives from. If the derivation chain has a gap (one of the source invariants is On-chain=No), the economic invariant is also On-chain=No.
+
+**Verification gate** (MANDATORY before including any inferred invariant):
+- Conservation: confirm the Δ-pair exists at the cited lines (same function body).
+- Guard (Pass A, §1 row): confirm the require/assert/if-revert is verbatim from code.
+- Guard lift (Pass B, §2 row): confirm the lifted global property references persistent storage (not just a transient parameter restatement). Confirm all write sites of the constrained variable have been enumerated via Grep, and the On-chain=Yes/No verdict matches the enumeration — if any write site lacks the guard and the row says On-chain=Yes, the row is invalid.
+- NatSpec: confirm the `@invariant` tag or comment exists verbatim at the cited location AND asserts a global property (not a per-call note). If it's a per-call note, drop — do not route to §2.
+- Ratio: confirm the formula is exact and the snapshot ordering (before/after other writes in the same function) is noted.
+- StateMachine: confirm both sides of the edge exist AND confirm no reverse path. If there IS a reverse path, it's a togglable flag — drop.
+- Temporal: confirm the comparison involves a storage variable, not just block.timestamp vs parameters.
+- Cross-contract: confirm both caller usage AND callee write site exist in scope.
+- Economic: confirm all referenced I-N / X-N IDs are themselves verified.
+- If you cannot verify → drop the row. "Could not verify" is not a valid row.
+
+**Output**: Invariant candidates feed directly into `invariants.md` (Step 3a). x-ray.md Section 3 gets Enforced Guards (Reference) + top 3-5 inferred (prioritize On-chain=No from Conservation, Cross-Contract, and lifted-guard gaps; include one high-signal Yes row for structural coverage like a ratio or state-machine latch).
+
 ## Step 3: Write Output
 
 ### Test existence vs. coverage execution (CRITICAL)
 
-**Test presence** is determined by Step 1 enumeration (`test_files`, `test_functions`, `stateless_fuzz`, `foundry_invariant`, `echidna`, `medusa`, `hardhat_fuzz`, `fork`, `certora`, `halmos`, `hevm`, `scribble` counts). These are file-scan results and are ALWAYS reliable regardless of whether the toolchain can compile or run. Multi-signal categories (`echidna`, `medusa`, `certora`, `halmos`, `scribble`) output as `functions:configs` — e.g., `5:1` means 5 test functions + 1 config file detected.
+**Test presence** is determined by Step 1 enumeration (`test_files`, `test_functions`, `stateless_fuzz`, `foundry_invariant`, `echidna`, `medusa`, `hardhat_fuzz`, `fork`, `certora`, `halmos`, `hevm` counts). These are file-scan results and are ALWAYS reliable regardless of whether the toolchain can compile or run. Multi-signal categories (`echidna`, `medusa`, `certora`, `halmos`) output as `functions:configs` — e.g., `5:1` means 5 test functions + 1 config file detected.
 
 **Coverage metrics** (line/branch %) come from `forge coverage` or `hardhat coverage` which require installed dependencies, successful compilation, and passing tests. Coverage can fail for many reasons unrelated to test quality:
 - Dependencies not installed (`npm install` / `forge install` not run)
@@ -215,21 +327,25 @@ Use the exact nSLOC TOTAL from the Step 1 enumerate output (no `~` prefix) in th
 **Rules:**
 1. Use `test_files`/`test_functions` from Step 1 enumeration for ALL test existence claims. Never infer "no tests" from coverage tool failure.
 2. If coverage fails but enumeration shows tests exist, report: `"[N] test files with [M] test functions detected; coverage metrics unavailable — [failure reason]"`.
-3. In "Gaps" subsection, only flag missing test categories (stateless_fuzz=0, foundry_invariant=0, echidna=0, medusa=0, certora=0, halmos=0, hevm=0, scribble=0, fork=0), never flag "no tests" when enumeration shows they exist. Prioritize gaps by audit impact: missing stateful fuzz and formal verification for math-heavy/financial logic is higher priority than missing fork tests.
+3. In "Gaps" subsection, only flag missing test categories (stateless_fuzz=0, foundry_invariant=0, echidna=0, medusa=0, certora=0, halmos=0, hevm=0, fork=0), never flag "no tests" when enumeration shows they exist. Prioritize gaps by audit impact: missing stateful fuzz and formal verification for math-heavy/financial logic is higher priority than missing fork tests.
 4. In git history "Security Observations", never claim "commits without tests" based on coverage failure. The `test_co_change_rate` from git analysis measures file co-modification in commits, not coverage — qualify it as such.
 5. If coverage fails, do NOT let the failure cascade into threat model or risk assessments. Test presence (from enumeration) and coverage metrics (from tooling) are independent signals.
 
 Check forge coverage status: include results if done, failure reason if failed, "pending" if still running. Do NOT wait.
 
-### 3a. Write ALL output files (3 parallel Write calls in ONE message)
+### 3a. Write ALL output files (4 parallel Write calls in ONE message)
 
-All output files go into the `x-ray/` directory. Write ALL THREE files in a SINGLE message so they are created concurrently:
+All output files go into the `x-ray/` directory. Write ALL FOUR files in a SINGLE message so they are created concurrently:
 
 **1. x-ray/architecture.json** — Follow format and rules in the architecture guide section of `references/templates.md` (already loaded in Step 1).
 
-**2. x-ray/x-ray.md** — Follow template in the output template section of `references/templates.md` (already loaded in Step 1). Under 500 lines. No fabrication.
+**2. x-ray/x-ray.md** — Follow template in the output template section of `references/templates.md` (already loaded in Step 1). Under 500 lines. No fabrication. Section 3 (Invariants) is a **POINTER ONLY** to `invariants.md` — do NOT include a Guards table, do NOT list top inferred invariants. One blockquote callout with counts (guards / single-contract / cross-contract / economic) and a strong link to the invariants.md file is the entire §3. The invariant catalog lives exclusively in `invariants.md`; duplicating it in x-ray.md was old V2 behavior and is no longer correct.
+
+**Key Attack Surfaces cross-link requirement**: When writing Section 2 Key Attack Surfaces, cross-reference each surface against the `invariants.md` blocks you just produced. If the surface's cited `file:line` falls within the `Location` / `Derivation` / `Caller side` / `Callee side` window of any G-N / I-N / X-N / E-N block, append the matching IDs as bracketed markdown links immediately after the surface title using LOWERCASE slug fragments: `- **Surface name** &nbsp;&#91;[X-4](invariants.md#x-4), [I-17](invariants.md#i-17)&#93; — ...`. Separate each surface bullet with a blank line. Surfaces that are purely access-control or upgrade-ability concerns may be left unlinked — that is a healthy signal, not a gap. Typical hit rate on non-trivial protocols: ≥70% of surfaces link to at least one invariant.
 
 **3. x-ray/entry-points.md** — Using the full entry point data collected in Step 2b and the flow paths from Step 2b-flow, follow the entry points template section of `references/templates.md` (already loaded in Step 1). Start with the Protocol Flow Paths section (arrow chains showing prerequisite sequences for each major entry point), then the access-level detail sections. Factual only — no threat analysis (that stays in x-ray.md). If the protocol has >30 entry points, use compact tables for role-gated and admin sections instead of per-function detail blocks. Only permissionless entry points get the full detail block treatment regardless of count.
+
+**4. x-ray/invariants.md** — Follow the invariant map template section of `references/templates.md` (already loaded in Step 1). Four sections: Enforced Guards (Reference), Inferred (Single-Contract), Inferred (Cross-Contract), Economic. **Use `#### G-N` / `#### I-N` / `#### X-N` / `#### E-N` heading blocks — NOT tables.** Heading anchors (slug `#g-1`, `#i-17`, …) are the target of cross-file markdown links from x-ray.md attack surfaces; inline `<a id>` anchors inside table cells do NOT work cross-file in VS Code. Each `G-N` block must include a `Purpose` line explaining what the guard protects (not just what it checks). Every inferred block MUST cite a concrete Δ-pair, guard-lift + write-sites, edge, temporal predicate, or NatSpec claim — drop blocks that cannot. Every cross-contract block must cite BOTH caller-side assumption AND callee-side write sites (both must be inside the scope files). Every economic block must derive from specific I-N / X-N IDs. No cap on block count. Factual only — no threat analysis.
 
 **Writing Section 2 (Threat & Trust Model)** — Follow the structure in the output template. Use `references/threats.md` for threat profiles, temporal threats, and composability threats content (all in one file, already loaded in Step 1). For hybrids, merge: primary adversary list first, then unique secondary threats (de-duplicate overlapping ones).
 
