@@ -7,7 +7,7 @@
 > - **In Step 2e (Protocol Classification)** — use the detection-signals table to label the protocol by type.
 > - **In Step 3a (Writing Section 2 of x-ray.md)** — use adversary rankings, attack patterns, and critical invariants listed here to know *what to look for* and *who threatens the protocol*, then TRANSLATE that knowledge into the output format.
 >
-> **DO NOT copy exploit-chain prose verbatim into Key Attack Surfaces.** Phrases like *"Oracle manipulation → inflated collateral → drain the pool"* are intentional here — they teach the threat — but the `templates.md` **DO-NOT-EXPLOIT RULE** forbids them in the report. Convert "→ attacker drains X" into "worth tracing…" / "worth checking…" / "worth confirming…" when writing the bullet. Name the surface and the concern; let the auditor finish the sentence.
+> **DO NOT copy exploit-chain prose verbatim into Key Attack Surfaces.** Phrases like *"Oracle manipulation → inflated collateral → drain the pool"* are intentional here — they teach the threat — but the `templates.md` **DO-NOT-EXPLOIT RULE** forbids them in the report. Do **not** replace concrete mechanism language with hedges like *"worth checking"* or *"worth tracing"*. Instead, rewrite the threat as a concise, falsifiable concern that names the actual mechanism, asymmetry, or trust boundary at issue, then stop before the final exploit or impact claim.
 
 This reference provides per-protocol-type threat intelligence. The skill auto-classifies the protocol from code signals in Step 2, then uses the matching profile(s) to weight adversaries, attack patterns, and surfaces in the threat model.
 
@@ -64,7 +64,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Oracle price reflects fair market value within acceptable deviation and freshness bounds
 - Interest accrual is monotonic and cannot be manipulated to extract value
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. The complete price calculation path: oracle read → price normalization → collateral value → health factor. Every step is a manipulation point.
 2. Can a single transaction borrow, manipulate price, and liquidate? If yes, flash loan attack is viable.
 3. Liquidation math: is the bonus sufficient to cover gas + slippage? What happens when collateral is illiquid?
@@ -97,7 +97,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Swap output amount matches the invariant-derived calculation exactly (no rounding exploitation)
 - Reserves tracked in contract state match actual token balances (no donation attack surface)
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Swap math: is the invariant correctly maintained? Are there rounding errors that consistently favor one direction?
 2. LP mint/burn math: what happens at totalSupply == 0? Is there minimum liquidity enforcement?
 3. Does the pool expose `getPrice()`, `observe()`, or similar that other contracts call? If yes, it's an oracle and manipulation has external blast radius.
@@ -129,7 +129,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Strategy cannot extract more than it was allocated
 - Share price can only increase from yield, never from manipulation
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Share price calculation: `convertToAssets` / `convertToShares`. Is there a virtual offset or minimum deposit to prevent inflation attacks?
 2. Strategy interface: what can a strategy do? Can it report arbitrary gain/loss? Who can add/remove strategies?
 3. Does `totalAssets()` use `balanceOf(this)` or internal accounting? If balanceOf, donation attacks are possible.
@@ -161,7 +161,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Liquidation can always restore individual position collateralization
 - Total supply <= total debt ceiling across all collateral types
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Minting path: what collateral is accepted → how is it valued (oracle) → what's the ratio → can the ratio be changed?
 2. Redemption path: can all stablecoins be redeemed simultaneously? Is there a priority queue? What happens under stress?
 3. Liquidation mechanism: is it profitable? What happens if collateral price drops faster than liquidations can execute?
@@ -194,7 +194,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Funding rate converges open interest imbalance over time (doesn't diverge)
 - Mark price cannot deviate from index price beyond safety bounds
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. PnL calculation: is it correct under all conditions (positive, negative, at leverage limits)?
 2. Liquidation threshold vs. actual execution: is there enough margin between liquidation trigger and insolvency?
 3. Oracle: mark price vs. index price. How is mark price calculated? Can it be manipulated within a block?
@@ -226,7 +226,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Validator performance doesn't systematically disadvantage stakers
 - Slashing events are reflected in exchange rate before any user can exit at stale rate
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Exchange rate calculation: who reports rewards/slashing? How often? Can it be manipulated?
 2. Withdrawal mechanism: is there a queue? What's the delay? Can it be griefed?
 3. Validator selection: who chooses validators? Can a malicious validator be added?
@@ -257,7 +257,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - Message cannot be forged without validator threshold consensus
 - Bridge accounting is consistent across chains (no cross-chain double-spend)
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Validator/relayer trust model: how many validators? What's the threshold? Can they be changed?
 2. Message replay protection: is there a nonce? Is it checked correctly? Can it overflow?
 3. Proof verification: merkle proof, signature scheme. Are there edge cases?
@@ -289,7 +289,7 @@ Example: A protocol with `swap()`, `addLiquidity()`, `borrow()`, `liquidate()` �
 - No single role can bypass governance unilaterally for non-emergency actions
 - Proposal calldata matches its description (can be verified on-chain)
 
-**What to look for first:**
+**Priority mechanisms to inspect first:**
 1. Voting power: snapshot or current balance? If current, flash loan attack is trivial.
 2. Quorum and threshold: are they high enough to prevent capture? What's the token distribution?
 3. Timelock: is the delay nonzero? Is it long enough for users to react?
@@ -322,27 +322,27 @@ The most dangerous 24-48 hours. The protocol transitions from code to live syste
 **Initialization front-running:**
 Attacker watches the mempool for `initialize()` calls and front-runs with malicious parameters. Critical for UUPS proxies where `initialize()` sets the owner. Also applies to pool creation, market listing, and oracle setup.
 
-What to look for: `initialize()` / `init()` functions without access control or without `initializer` modifier. Proxy deployment where `initialize` is called in a separate transaction from deployment. Pool/market creation that can be called by anyone.
+Priority mechanisms: `initialize()` / `init()` functions without access control or without `initializer` modifier. Proxy deployment where `initialize` is called in a separate transaction from deployment. Pool/market creation that can be called by anyone.
 
 **Parameter misconfiguration:**
 Protocol deployed with testing parameters still active. DELAY=0 in timelocks, test oracle addresses, overly permissive access control, dev-mode fee settings. The code is correct but the configuration creates the vulnerability.
 
-What to look for: Hardcoded constants that look like test values (0 delays, max uint fees, known test addresses like 0xdead). Constructor/initializer parameters without validation. Default values that are insecure.
+Priority mechanisms: Hardcoded constants that look like test values (0 delays, max uint fees, known test addresses like 0xdead). Constructor/initializer parameters without validation. Default values that are insecure.
 
 **Ownership not transferred:**
 Contract deployed with deployer EOA as owner, intended to transfer to multisig, but transfer hasn't happened yet. Creates a window where a single key controls everything.
 
-What to look for: `Ownable` without `transferOwnership()` in deployment scripts. Two-step ownership transfer that hasn't been accepted. Role-based access where roles haven't been granted to the intended addresses.
+Priority mechanisms: `Ownable` without `transferOwnership()` in deployment scripts. Two-step ownership transfer that hasn't been accepted. Role-based access where roles haven't been granted to the intended addresses.
 
 **Empty-state exploitation:**
 Protocols behave differently when empty. First depositor can manipulate share prices (vault inflation), set initial pool prices, or establish initial state that disadvantages subsequent users.
 
-What to look for: `if (totalSupply == 0)` branches. Pool creation with attacker-chosen initial prices/ratios. Vault deposit when totalAssets == 0. Missing minimum initial deposit requirements.
+Priority mechanisms: `if (totalSupply == 0)` branches. Pool creation with attacker-chosen initial prices/ratios. Vault deposit when totalAssets == 0. Missing minimum initial deposit requirements.
 
 **Deployment ordering bugs:**
 Contracts deployed in wrong order, missing approvals between contracts, circular dependencies not resolved, proxy pointing at wrong implementation.
 
-What to look for: Deployment scripts with multiple transactions. Contracts that reference each other (circular setup). Approval chains (token approvals, role grants) that must happen in specific order.
+Priority mechanisms: Deployment scripts with multiple transactions. Contracts that reference each other (circular setup). Approval chains (token approvals, role grants) that must happen in specific order.
 
 
 ---
@@ -362,32 +362,32 @@ Protocols that work perfectly in calm markets can break catastrophically during 
 **Oracle latency under volatility:**
 Oracle heartbeat periods (1h for some Chainlink pairs) mean prices can be stale during rapid market moves. Every calculation using that price is wrong for the duration. Borrowers can be liquidated at unfair prices, or worse, cannot be liquidated at all (stale price shows healthy position while real value is underwater).
 
-What to look for: Chainlink `latestRoundData()` calls — what staleness threshold is used? Is it appropriate for the asset's volatility? Is the heartbeat period documented/configured or hardcoded? Is there a deviation threshold check? What happens if `updatedAt` is 0 or in the future?
+Priority mechanisms: Chainlink `latestRoundData()` calls — staleness threshold, asset-volatility fit, heartbeat source, deviation bound, and `updatedAt == 0` / future timestamp behavior.
 
 **Liquidation cascade:**
 Position A is liquidated → liquidation dumps collateral on market → price drops further → Position B is liquidated → cycle repeats. The protocol's own liquidation mechanism amplifies the crash. Can cause systemic insolvency.
 
-What to look for: Liquidation mechanism — does it sell collateral on-market (creating price impact)? Is there a circuit breaker? Is liquidation throttled? Can the protocol handle 30%+ collateral price drops in a single block?
+Priority mechanisms: Liquidation mechanism, on-market collateral sale price impact, circuit breakers, liquidation throttles, and single-block 30%+ collateral shock handling.
 
 **Liquidity evaporation:**
 During stress, LPs withdraw liquidity. Swaps have worse slippage. Liquidation bots can't efficiently swap collateral. Bad debt accumulates because liquidations become unprofitable at the gas + slippage cost.
 
-What to look for: Liquidation profitability assumptions — are they valid when liquidity is thin? Does the protocol assume swap paths exist with sufficient depth? Is there a minimum liquidity requirement?
+Priority mechanisms: Liquidation profitability under thin liquidity, assumed swap-path depth, and minimum-liquidity requirements.
 
 **Correlated asset depeg:**
 Protocol assumes USDC = $1, stETH = ETH, wBTC = BTC. During stress, these correlations break. A lending protocol that treats stETH as equivalent to ETH suddenly has undercollateralized positions.
 
-What to look for: Hardcoded price equivalences (1:1 assumptions). Missing oracle for derivative assets (using underlying asset's oracle instead). Collateral factors that don't account for depeg risk.
+Priority mechanisms: Hardcoded 1:1 price equivalences, derivative assets using underlying oracles, and collateral factors that ignore depeg risk.
 
 **Gas price spikes:**
 Critical operations (liquidations, rebalancing, oracle updates) become prohibitively expensive. Time-sensitive operations fail to execute. Keepers and bots stop operating because gas cost exceeds profit.
 
-What to look for: Gas-sensitive operations (keeper-dependent flows). Liquidation incentive vs. gas cost assumptions. Operations that must execute within a time window. Are there fallback mechanisms for keeper failure?
+Priority mechanisms: Keeper-dependent flows, liquidation incentive vs. gas cost assumptions, execution windows, and keeper-failure fallback mechanisms.
 
 **Withdrawal stampede:**
 Many users try to withdraw simultaneously. If the protocol has limited liquid reserves (funds deployed in strategies, locked in positions), early withdrawers drain liquidity and late withdrawers are stuck.
 
-What to look for: Withdrawal queues, rate limits. What percentage of TVL is liquid vs. deployed? Can strategies be unwound quickly? Is there a withdrawal fee that increases under stress (to discourage runs)?
+Priority mechanisms: Withdrawal queues, rate limits, liquid-vs-deployed TVL split, strategy unwind latency, and stress-mode withdrawal fees.
 
 
 ---
@@ -401,27 +401,27 @@ Every governance action or upgrade creates a transient vulnerability window. The
 **Timelock exploitation window:**
 A governance proposal is queued with a known timelock delay. Everyone can see what parameters will change. Attackers position before execution to exploit new parameters immediately. Example: if collateral factor increases, max borrow the instant the timelock executes.
 
-What to look for: Timelock durations — are they long enough for users to react? Can users exit positions before parameter changes take effect? Are there parameters that could be exploited if their pending value is publicly known?
+Priority mechanisms: Timelock duration, user exit window before execution, and pending parameter values that become exploitable once public.
 
 **Upgrade storage collision:**
 Proxy upgrade changes storage layout, corrupting existing state. Balances become wrong, ownership changes unexpectedly, access control breaks. The new implementation reads old storage through a different layout.
 
-What to look for: UUPS `_authorizeUpgrade`, transparent proxy patterns. Is there storage gap usage? Are upgrades tested with the actual storage layout? Is there an upgrade validation step?
+Priority mechanisms: UUPS `_authorizeUpgrade`, transparent proxy admin path, storage gap layout, upgrade tests against live layout, and upgrade validation.
 
 **Flash loan governance:**
 Attacker borrows governance tokens via flash loan, votes, and returns tokens in same transaction. Trivial if voting power is measured at current block. Some protocols are immune (snapshot-based voting), others are not.
 
-What to look for: Voting power source — `balanceOf(msg.sender)` (vulnerable) vs. snapshot at proposal creation block (immune). Can governance tokens be borrowed from lending protocols?
+Priority mechanisms: Voting power source — `balanceOf(msg.sender)` versus proposal-block snapshot — and borrowable governance-token supply.
 
 **Governance capture (slow):**
 Attacker accumulates voting power over time — buying tokens, receiving delegations, borrowing from Aave. Once threshold is reached, passes malicious proposals. The timelock is the last defense.
 
-What to look for: Token distribution — is voting power concentrated? What's the quorum? Can a well-funded attacker buy enough tokens to pass proposals? Is there a guardian that can veto?
+Priority mechanisms: Voting-power concentration, quorum, market depth to acquire passing power, and guardian veto path.
 
 **Migration window:**
 Protocol migrates from V1 to V2. During migration, funds are in transit. Approval chains exist between old and new contracts. Users who don't migrate lose access or face degraded conditions. The V1→V2 bridge is an attack target.
 
-What to look for: Migration functions, V1→V2 transfer mechanisms. Do V1 contracts retain fund access? Is there a deadline? Can migration be front-run?
+Priority mechanisms: Migration functions, V1→V2 transfer mechanisms, residual V1 fund access, deadlines, and front-runnable migration steps.
 
 
 ---
@@ -435,22 +435,22 @@ Protocols don't live forever. When maintenance stops, a new class of threats eme
 **Residual funds in deprecated contracts:**
 Old contracts still hold tokens but monitoring/maintenance has stopped. Keepers no longer run. Oracles go stale permanently. Any exploitable path in the old contract becomes a free-money opportunity with zero monitoring.
 
-What to look for: Multi-version architecture. Are old versions still accessible? Do they still hold funds? Is there a forced migration mechanism?
+Priority mechanisms: Multi-version architecture, callable old versions, residual funds, and forced migration mechanisms.
 
 **Abandoned approval chains:**
 Users who interacted with V1 still have active token approvals to V1 contracts. If V1 has any exploitable path, those user approvals are a liability — attacker can drain user wallets through the deprecated contract.
 
-What to look for: Does the protocol use `approve()` (unlimited) or `permit()`? Is there a mechanism to revoke approvals during migration? Are users notified?
+Priority mechanisms: Unlimited `approve()` / `permit()` usage, migration-time revocation path, and user approval migration state.
 
 **Dependent protocol breakage:**
 Other protocols that integrate with the deprecated protocol don't know it's deprecated. They continue calling functions that return stale data, empty results, or revert unexpectedly.
 
-What to look for: Does this protocol serve as an oracle or data source for others? Is there a deprecation flag or kill switch that integrators can check?
+Priority mechanisms: Downstream oracle/data-source usage, deprecation flags, and integrator-visible kill switches.
 
 **Frozen state exploitation:**
 When governance stops or admin keys are lost, the protocol is frozen in its last configuration. Market conditions change but parameters can't be updated. Interest rates, collateral factors, oracle parameters all become increasingly stale.
 
-What to look for: What happens if no governance proposal passes for 6 months? Are there parameters that must be periodically updated? Is there an automated fallback?
+Priority mechanisms: stale governance configuration, periodically required parameter updates, and automated fallback paths.
 
 ---
 
@@ -490,7 +490,7 @@ The protocol reads prices from an oracle. But that oracle aggregates from source
 
 **Threat**: Protocol → Oracle → underlying source(s). If any source in the chain is manipulable within the protocol's trust assumptions, the oracle is effectively manipulable.
 
-**What to look for:**
+**Priority mechanisms:**
 - What oracle is used? (Chainlink, Uniswap TWAP, Pyth, custom)
 - What's the oracle's aggregation method? (median of N sources, TWAP, VWAP)
 - Staleness check: is `updatedAt` validated? What threshold? Is the threshold appropriate for the asset?
@@ -506,7 +506,7 @@ Protocol deposits funds into external yield protocols (Aave, Compound, Yearn, Co
 
 **Threat**: The external protocol holds the actual funds. If it gets exploited, paused, or changes behavior, this protocol's funds are at risk. The strategy is the bridge between "our code" and "their code."
 
-**What to look for:**
+**Priority mechanisms:**
 - What protocols do strategies deposit into? List each one.
 - Is the external protocol upgradeable? By whom? Through what process?
 - Can the external protocol pause withdrawals? Under what conditions?
@@ -537,7 +537,7 @@ Every `token.transfer()`, `token.transferFrom()`, `token.balanceOf()` call carri
 | Token is immutable | Most tokens | Upgradeable tokens (USDC proxy) | Behavior changes post-deployment without consent |
 | No max supply cap affecting mint | Most tokens | Some algorithmic tokens | Deposit credited but tokens never arrive |
 
-**What to look for:**
+**Priority mechanisms:**
 - Does the code use `balanceOf(before) - balanceOf(after)` pattern? (handles fee-on-transfer)
 - Does the code use SafeERC20? (handles non-reverting tokens)
 - Are token decimals dynamic or hardcoded?
@@ -550,7 +550,7 @@ External calls can trigger callbacks that re-enter the protocol before state is 
 
 **Threat**: Even with reentrancy guards on direct calls, callbacks through external protocols can bypass them. Token transfer → external protocol callback → re-enter through a different function.
 
-**What to look for:**
+**Priority mechanisms:**
 - State changes after external calls (violating checks-effects-interactions)
 - Reentrancy guards: are they per-function or global? Per-function guards don't protect cross-function reentrancy
 - ERC-777 tokens: `tokensReceived` hook fires on transfer
@@ -569,7 +569,7 @@ Two or more protocols interact with the same underlying state, creating indirect
 
 **Threat**: Protocol A and Protocol B both use the same Uniswap pool for swaps or pricing. A large action in Protocol A moves the pool price, affecting Protocol B's calculations within the same block.
 
-**What to look for:**
+**Priority mechanisms:**
 - Does the protocol swap through public pools? Which ones?
 - Do those pools have significant TVL relative to the protocol's swap sizes?
 - Could a large liquidation in this protocol move a pool price enough to affect other protocols?
@@ -581,7 +581,7 @@ Two or more protocols interact with the same underlying state, creating indirect
 
 **Threat**: Multiple protocols use the same oracle feed. A market event triggers liquidations across all of them simultaneously, creating correlated selling pressure and oracle feedback loops.
 
-**What to look for:**
+**Priority mechanisms:**
 - Which oracle feeds does this protocol use?
 - Are these the same feeds used by major lending/derivatives protocols?
 - Could liquidations in this protocol create sell pressure that affects the oracle price?
@@ -591,7 +591,7 @@ Two or more protocols interact with the same underlying state, creating indirect
 
 **Threat**: Users grant token approvals to protocol contracts. If any approved contract has an exploitable path, user funds are at risk even if users never interact with the vulnerable function.
 
-**What to look for:**
+**Priority mechanisms:**
 - Does the protocol request unlimited approvals? (`type(uint256).max`)
 - Are approvals scoped to specific functions or broad?
 - If the protocol is upgradeable, an upgrade could add a function that drains approved tokens
@@ -607,7 +607,7 @@ External protocols change over time. This protocol's assumptions about them can 
 
 **Threat**: An external protocol's governance changes a parameter that this protocol's logic depends on. No contract interaction changed, but economic assumptions broke.
 
-**What to look for:**
+**Priority mechanisms:**
 - Does this protocol assume specific parameter values from external protocols? (interest rates, collateral factors, fee tiers)
 - Are external protocol parameters read dynamically or hardcoded?
 - Would an external parameter change require this protocol to update its own parameters?
@@ -618,7 +618,7 @@ External protocols change over time. This protocol's assumptions about them can 
 
 **Threat**: External protocol upgrades its implementation. Function signatures are the same, but behavior changes (gas cost, revert conditions, return values, side effects).
 
-**What to look for:**
+**Priority mechanisms:**
 - Are external dependencies behind upgradeable proxies?
 - Does this protocol's error handling account for behavior changes? (try/catch that assumes specific revert reasons)
 - Are gas estimates hardcoded that could break if external protocol's gas usage changes?
@@ -627,7 +627,7 @@ External protocols change over time. This protocol's assumptions about them can 
 
 **Threat**: External protocol deprecates an oracle feed, a pool, or an endpoint. The call doesn't revert — it returns stale/wrong data silently. Or it starts reverting, and this protocol's try/catch falls through to an unsafe default.
 
-**What to look for:**
+**Priority mechanisms:**
 - Are there freshness checks on all external data sources?
 - What's the try/catch fallback behavior? Does it fail-open (use stale data) or fail-closed (revert)?
 - Is there monitoring for external dependency health?
@@ -636,7 +636,7 @@ External protocols change over time. This protocol's assumptions about them can 
 
 **Threat**: This protocol uses Protocol A, which uses Protocol B. Protocol B upgrades. Protocol A's behavior changes. This protocol's behavior changes. No visibility into the root cause.
 
-**What to look for:**
+**Priority mechanisms:**
 - Map the full dependency chain (2-3 levels deep). For each level:
   - Is it upgradeable?
   - Is it governed?
@@ -644,4 +644,3 @@ External protocols change over time. This protocol's assumptions about them can 
 - The deeper the chain, the less control this protocol has. Flag chains deeper than 2 levels.
 
 ---
-

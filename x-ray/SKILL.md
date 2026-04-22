@@ -9,6 +9,17 @@ Generate an `x-ray/` folder at the project root containing all output files. Pip
 
 `$SKILL_DIR` = the directory containing this SKILL.md file. Resolve it from the path you loaded this skill from (e.g. if this file is at `/path/to/x-ray/SKILL.md`, then `$SKILL_DIR` = `/path/to/x-ray`).
 
+## Aggressive Surface Standard (MANDATORY)
+
+X-Ray is a pre-audit exploit-surface mapper, not a passive project summary. The output must be concrete enough for an auditor to start reconstructing exploit paths immediately.
+
+Rules:
+- Prefer mechanism statements over prompts. Write `raw reserves set claim payouts while liquidity can be dust`, not `worth checking reserve pricing`.
+- Do not use hedge phrases such as `worth checking`, `worth tracing`, `worth confirming`, `may be interesting`, or `consider reviewing`.
+- Do not write a full exploit conclusion unless the path was verified end-to-end; stop at the concrete mechanism, invariant gap, accounting asymmetry, or trust-boundary violation.
+- When a path is unresolved, name the exact missing artifact or unverified dependency and keep the surface high-priority if it controls value movement, price setting, or shared reserve mutation.
+- Attack surfaces must be falsifiable: each bullet should contain a code reference plus the specific state, value, or dependency relationship that can be tested.
+
 ## Progress tracking (MANDATORY)
 
 Before doing anything else, call TodoWrite with these 3 todos (all `pending`):
@@ -377,10 +388,12 @@ All output files go into the `x-ray/` directory. Write ALL FOUR files in a SINGL
 When writing **Key Attack Surfaces**, apply this priority override:
 - if the code exposes a public or unresolved path that can burn / skim / transfer inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh / finalize reserves, that surface must appear before softer accounting, admin, or DoS surfaces unless a stronger public cash-out path is already confirmed
 - if economics for that reserve-destruction path are not yet fully closed, write it up explicitly as an unresolved primary surface rather than burying it behind easier but lower-impact issues
+- every surface must name the concrete mechanism, not an audit instruction; banned forms include `worth checking`, `worth tracing`, `worth confirming`, `may be exploitable`, and `consider reviewing`
+- unresolved surfaces must say what remains unresolved and why it matters to the value path; do not demote them only because the final extraction leg was not proven during x-ray
 
 **Verification rules** (apply during Section 2 writing):
 - **Permissionless entry points**: Use only the grep-verified list from Step 2b. The Step 2b procedure is the source of truth — do not rely on subagent summaries.
-- **Security claims**: Before writing any claim that a security check is missing, incomplete, or bypassable, you MUST trace the actual data flow by reading the relevant code. Specifically: (1) identify all write sites for the variable under question (use Grep), (2) confirm your claim holds against those write sites. Subagent summaries are not sufficient. If you cannot verify, qualify the claim with "could not confirm" rather than stating it as fact.
+- **Security claims**: Before writing any claim that a security check is missing, incomplete, or bypassable, you MUST trace the actual data flow by reading the relevant code. Specifically: (1) identify all write sites for the variable under question (use Grep), (2) confirm your claim holds against those write sites. Subagent summaries are not sufficient. If you cannot verify, do not state the claim as fact; write the surface as an unresolved mechanism and name the missing verification.
 
 **Section 7 (Git History)**: Integrate `x-ray/git-security-analysis.json` into: Contributors, Review Signals, Hotspots, Security-Relevant Commits (score >= 5), Dangerous Area Evolution, Forked Dependencies, Tech Debt, Cross-Reference Synthesis (2-4 bullets connecting git signals to Sections 2-3).
 
@@ -409,7 +422,7 @@ After all files are written and cleanup is done, read the `## X-Ray Verdict` sec
 ## Constraints
 
 - Under 500 lines. Protect threat model, invariants, test gaps, git analysis, verdict — compress other sections if needed.
-- No fabrication. Say "could not determine" when uncertain.
+- No fabrication. When uncertain, state the exact unresolved artifact, dependency, storage value, or write site instead of using generic uncertainty language.
 - Steps 1-3 fully autonomous. No user interaction required.
 - Always group contracts by subsystem in scope table.
 - Single pass. No partial outputs.
