@@ -52,15 +52,29 @@ grep -rcP '@notice|@dev|@param|@return' "$SRC" --include='*.sol' 2>/dev/null | w
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 echo "=== test_files ==="
-find . -name '*.sol' -path '*/test*' \
+# Count .sol, .js, .ts test files (Foundry + Hardhat). Hardhat conventions:
+# test files live under test/ or tests/ and typically end in .test.js/.test.ts/.spec.js/.spec.ts,
+# but plain *.js / *.ts under test/ are also valid. We accept anything under a test dir.
+find . \( -name '*.sol' -o -name '*.js' -o -name '*.ts' -o -name '*.mjs' -o -name '*.cjs' \) \
+  -path '*/test*' \
   -not -path '*/node_modules/*' -not -path '*/lib/*' -not -path '*/forge-std/*' \
-  -not -path '*/out/*' -not -path '*/artifacts/*' -not -path '*/cache/*' 2>/dev/null | wc -l || echo "0"
+  -not -path '*/out/*' -not -path '*/artifacts/*' -not -path '*/cache/*' \
+  -not -path '*/dist/*' -not -path '*/build/*' -not -path '*/coverage/*' \
+  -not -path '*/typechain*/*' 2>/dev/null | wc -l || echo "0"
 
 echo "=== test_functions ==="
-grep -rcP 'function test' . --include='*.sol' \
+# Foundry: `function test...` inside a test dir. Hardhat: `it(...)` / `it.only(...)` inside .js/.ts.
+SOL_TESTS=$(grep -rcP 'function test' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | \
-  grep -iP '/(test|tests|invariant|echidna|medusa|halmos|fuzz)/' | awk -F: '{s+=$NF}END{print s+0}'
+  grep -iP '/(test|tests|invariant|echidna|medusa|halmos|fuzz)/' | awk -F: '{s+=$NF}END{print s+0}')
+JS_TESTS=$(grep -rcP '^\s*it(\.(only|skip))?\s*\(' . \
+  --include='*.js' --include='*.ts' --include='*.mjs' --include='*.cjs' \
+  --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=out --exclude-dir=artifacts \
+  --exclude-dir=cache --exclude-dir=dist --exclude-dir=build --exclude-dir=coverage \
+  --exclude-dir=typechain --exclude-dir=typechain-types 2>/dev/null | \
+  grep -iP '/(test|tests|spec|specs)/' | awk -F: '{s+=$NF}END{print s+0}')
+echo $((SOL_TESTS + JS_TESTS))
 
 # ── Stateless Fuzz (Foundry) ──
 echo "=== stateless_fuzz ==="
@@ -124,14 +138,6 @@ echo "=== hevm ==="
 grep -rcP 'function\s+prove_' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}'
-
-# ── Scribble Annotations ──
-echo "=== scribble ==="
-SCRIBBLE_ANNOTATIONS=$(grep -rcP '///\s*#if_succeeds|///\s*#if_updated|///\s*#invariant|///\s*#if_assigned' . --include='*.sol' \
-  --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
-  --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}')
-SCRIBBLE_CONF=$(find . -maxdepth 3 \( -name '.scribble.config.json' -o -name 'scribble.config.json' \) 2>/dev/null | wc -l)
-echo "${SCRIBBLE_ANNOTATIONS}:${SCRIBBLE_CONF}"
 
 # ─── Docs ─────────────────────────────────────────────────────────────────────
 

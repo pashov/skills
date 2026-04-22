@@ -1,5 +1,14 @@
 # Protocol-Type Threat Profiles
 
+> **HOW TO USE THIS FILE**
+>
+> Treat this file as a threat *identification* library, **not** as a prose template for the final report.
+>
+> - **In Step 2e (Protocol Classification)** — use the detection-signals table to label the protocol by type.
+> - **In Step 3a (Writing Section 2 of x-ray.md)** — use adversary rankings, attack patterns, and critical invariants listed here to know *what to look for* and *who threatens the protocol*, then TRANSLATE that knowledge into the output format.
+>
+> **DO NOT copy exploit-chain prose verbatim into Key Attack Surfaces.** Phrases like *"Oracle manipulation → inflated collateral → drain the pool"* are intentional here — they teach the threat — but the `templates.md` **DO-NOT-EXPLOIT RULE** forbids them in the report. Convert "→ attacker drains X" into "worth tracing…" / "worth checking…" / "worth confirming…" when writing the bullet. Name the surface and the concern; let the auditor finish the sentence.
+
 This reference provides per-protocol-type threat intelligence. The skill auto-classifies the protocol from code signals in Step 2, then uses the matching profile(s) to weight adversaries, attack patterns, and surfaces in the threat model.
 
 ## Protocol Classification Signals
