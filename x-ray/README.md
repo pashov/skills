@@ -24,7 +24,7 @@ One command produces:
 
 _Part of an X-Ray report generation shown below_
 
-![Running x-ray in terminal](x_ray.gif)
+![Running x-ray in terminal](../static/x_ray.gif)
 
 ## Usage
 
