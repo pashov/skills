@@ -259,6 +259,26 @@
 - **D:** Shares redeemed at projected end-of-term rate rather than current realized rate. Early redeemers take more than proportional share — late redeemers find vault depleted.
 - **FP:** Redemption uses current realized rate (`totalAssets() / totalSupply()`). Withdrawal queue enforces proportional access. Early redemption penalty applied.
 
+**52A. Custom `transfer()` Policy Bypassed Through Inherited `transferFrom()`**
+
+- **D:** Token implements buy/sell/fee/anti-bot logic only in `transfer()` but leaves `transferFrom()` and `_transfer()` inherited. Standard router sells, LP adds, permit flows, and allowance-based helper paths use `transferFrom()` and therefore bypass the advertised restrictions.
+- **FP:** Core policy is enforced in `_transfer()` or both `transfer()` and `transferFrom()` route through the same checked internal function.
+
+**52B. Deferred Global State Consumed By Later Unrelated Transfer**
+
+- **D:** One public action writes a global pending bucket (`pendingBurn`, fee debt, queued reserve mutation, cached payout, burn debt), and a later unrelated public action consumes that bucket against shared reserves, balances, or accounting without proving the same actor or same economic action should bear it.
+- **FP:** Queued state is isolated per-user / per-position / per-order, or the realizing path proves the same record and same actor are being settled atomically.
+
+**52C. Constructor-Time `isContract` / `extcodesize` Anti-Bot Bypass**
+
+- **D:** Contract relies on `isContract`, `extcodesize`, or `code.length == 0` to block contract callers, but a helper contract can call during construction while code size is still zero and therefore bypass the restriction.
+- **FP:** No security-critical branching depends on code-size checks, or the guarded path is additionally authenticated by a robust capability that constructor-time callers cannot satisfy.
+
+**52. Donation Attack / Exchange-Rate Inflation**
+
+- **D:** Lending market, ERC4626 vault, wrapper, or share-priced collateral system derives exchange rate / NAV / collateral value from raw passive balances such as `IERC20(asset).balanceOf(address(this))`, `getCash`, or `totalAssets`. Supply/deposit caps are enforced only on formal `deposit` / `mint` / `supply` paths. Attacker mints a position normally, then donates underlying directly to the contract without minting new shares, inflating exchange rate and borrow/redeem power.
+- **FP:** Accounted assets are tracked separately from raw passive balances. Unsolicited donations are ignored or swept out of exchange-rate/collateral math. Direct donations mint offsetting shares or otherwise cannot increase borrow/redeem power.
+
 **52. Rounding in Favor of the User**
 
 - **D:** `shares = assets / pricePerShare` rounds down for deposit but up for redeem. Division without explicit rounding direction. First-depositor donation amplifies the error.
@@ -1335,3 +1355,243 @@
 
 - **D:** Contract implements `onERC1155Received` but not `onERC1155BatchReceived` (or returns wrong selector). `safeBatchTransferFrom` reverts, blocking batch settlement/distribution.
 - **FP:** Both callbacks implemented correctly, or inherits OZ `ERC1155Holder`. Protocol exclusively uses single-item `safeTransferFrom`.
+
+**267. Nonlinear Curve Midpoint Bias + Gross/Net Reserve Mismatch**
+
+- **D:** Custom pricing curve uses nonlinear math (`ln`, `exp`, `pow`, sigmoid, bonding curve) but approximates execution with midpoint / average price instead of the true integral. Output is computed from post-fee input while reserves or pool inventory are updated with the gross specified amount. The attacker alternates `A -> B -> A` swaps repeatedly, harvesting a small directional bias each round trip until the pool is drained.
+- **FP:** Execution price integrates the actual nonlinear curve (or uses a provably conservative bound), reserve accounting uses the same effective input as pricing, and repeated alternating round trips do not increase attacker value across reachable parameter bounds and realistic reserve states.
+
+**268. Block Timestamp Dependence**
+
+- **D:** `block.timestamp` used for game outcomes, randomness (`block.timestamp % N`), or auction timing where ~15s manipulation changes outcome.
+- **FP:** Timestamp used only for hour/day-scale periods. Timestamp used only for event logging with no state effect.
+
+**269. extcodesize Zero in Constructor**
+
+- **D:** `require(msg.sender.code.length == 0)` as EOA check. Contract constructors have `extcodesize == 0` during execution, bypassing the check.
+- **FP:** Check is non-security-critical. Function protected by merkle proof, signed permit, or other mechanism unsatisfiable from constructor.
+
+**270. DoS via Unbounded Loop**
+
+- **D:** Loop over user-growable unbounded array: `for (uint i = 0; i < users.length; i++)`. Eventually hits block gas limit.
+- **FP:** Array length capped at insertion: `require(arr.length < MAX)`. Loop iterates fixed small constant.
+
+**271. Block Number as Timestamp Approximation**
+
+- **D:** Time computed as `(block.number - startBlock) * 13` assuming fixed block times. Variable across chains/post-Merge. Wrong interest/vesting/rewards.
+- **FP:** `block.timestamp` used for all time-sensitive calculations.
+
+**272. Griefing via Dust Deposits Resetting Timelocks or Cooldowns**
+
+- **D:** Timelock/cooldown resets on any deposit with no minimum: `lastActionTime[user] = block.timestamp` inside `deposit(uint256 amount)` without `require(amount >= MIN)`. Attacker calls `deposit(1)` to reset victim's lock indefinitely.
+- **FP:** Minimum deposit enforced unconditionally. Cooldown resets only for depositing user. Lock assessed independently of deposit amounts per-user.
+
+**273. L2 Sequencer Uptime Not Checked**
+
+- **D:** Contract on L2 (Arbitrum/Optimism/Base) uses Chainlink feeds without querying L2 Sequencer Uptime Feed. Stale data during downtime triggers wrong liquidations.
+- **FP:** Sequencer uptime feed queried (`answer == 0` = up), with grace period after restart.
+
+**274. L2 Sequencer Grace Period Missing**
+
+- **D:** On L2 chains, when sequencer restarts after downtime, contracts immediately liquidate positions without allowing users a grace period to adjust collateral. Users who were solvent before downtime get unfairly liquidated.
+- **FP:** Explicit grace period logic after sequencer restart (e.g., `require(block.timestamp > sequencerUptimeTimestamp + GRACE_PERIOD)`). L1-only deployment. Chainlink L2 Sequencer Uptime Feed checked with grace window.
+
+**275. Liquidation Incentive Insufficient for Trustless Actors**
+
+- **D:** Liquidation reward (bonus %) doesn't cover gas cost for small positions. No one profitably liquidates dust positions, leading to bad debt accumulation. Protocol becomes insolvent as underwater positions compound.
+- **FP:** Minimum position size enforced at borrow time. Protocol operates its own liquidation bot. Insurance fund covers unprofitable liquidations. Dynamic liquidation incentive scaled to position size.
+
+**276. Collateral Withdrawal While Position Underwater**
+
+- **D:** User can withdraw partial collateral even when position is underwater, as long as the specific collateral's PNL is positive. Removes liquidation incentive without improving protocol health.
+- **FP:** Withdrawal blocked when overall position health factor < 1. Strict overcollateralization lock prevents any withdrawal while underwater.
+
+**277. Dust Loan Griefing (Minimum Loan Size Bypass)**
+
+- **D:** Attacker bypasses or exploits missing `minLoanSize` checks to create many tiny loans that are individually too small to profitably liquidate. Gas cost of liquidation exceeds recovered value, accumulating protocol bad debt.
+- **FP:** `require(borrowAmount >= MIN_BORROW)` enforced on all borrow paths. Batch liquidation mechanism handles dust positions. Automatic write-off for sub-threshold bad debt.
+
+**278. Unfair Liquidation via Cherry-Picked Collateral**
+
+- **D:** Liquidator selects which collateral asset to seize, choosing the most liquid/stable asset while leaving volatile collateral. Borrower's position becomes unhealthier post-liquidation despite liquidator profiting.
+- **FP:** Collateral seizure follows defined priority ordering. Liquidation enforces health improvement post-seizure (`healthFactorAfter > healthFactorBefore`). Single-collateral system.
+
+**279. Interest Accrual During Emergency Pause**
+
+- **D:** When admin pauses repayments for emergency, interest continues accruing. Users cannot repay but their debt grows, forcing liquidation of positions that were healthy before the pause.
+- **FP:** Pause simultaneously halts interest accrual. Symmetric pause behavior (repay and liquidate both paused together). Grace period after unpause before liquidations resume.
+
+**280. Repayment Paused While Liquidation Active**
+
+- **D:** Admin pauses repayments for emergency but liquidations remain active. Borrowers cannot exit positions while protocol can still seize their collateral — asymmetric freeze benefits protocol at user expense.
+- **FP:** Synchronized pause (repay and liquidate paused/unpaused together). Documented asymmetric design with economic justification. Emergency pause as intentional protocol safety feature.
+
+**281. Liquidation Leaves Borrower Unhealthier**
+
+- **D:** After partial liquidation, borrower's health factor is lower than before due to incorrect close factor calculation, cherry-picked collateral seizure, or liquidation bonus exceeding available surplus.
+- **FP:** Post-liquidation health check (`require(healthAfter >= healthBefore || healthAfter >= 1)`). Full liquidation when partial would worsen position. Documented minimum health improvement requirement.
+
+**282. No LTV Gap Between Borrow and Liquidation Threshold**
+
+- **D:** Liquidation threshold equals max borrow LTV. Positions become immediately liquidatable after borrowing with zero buffer for normal price volatility. Users have no margin to avoid liquidation.
+- **FP:** Explicit gap between max borrow LTV and liquidation threshold (e.g., borrow at 75%, liquidate at 80%). Documentation explains chosen parameters. Per-asset configurable thresholds.
+
+**283. First Depositor Reward Stealing (Staking)**
+
+- **D:** In staking/reward contracts, first depositor front-runs initial reward distribution with minimal (1-wei) deposit, capturing 100% of initial rewards intended for later legitimate stakers.
+- **FP:** Minimum stake amount enforced. Admin-only initial deposit establishes baseline. Time-weighted reward calculation prevents instant claiming. Initial reward distribution delayed until minimum TVL reached.
+
+**284. Reward Dilution via Direct Token Transfer**
+
+- **D:** Attacker transfers staking tokens directly to contract (bypassing `stake()` function), inflating `totalSupply` in balance-based calculations without earning tracked stake. Dilutes rewards for legitimate stakers.
+- **FP:** Separate reward token tracking independent of raw balance. Internal `totalStaked` variable updated only via `stake()`/`unstake()`. Protocol explicitly handles direct transfer surplus.
+
+**285. Flash Deposit/Withdraw Reward Griefing**
+
+- **D:** Large instantaneous deposit right before reward distribution dilutes per-token reward rate. Attacker withdraws immediately after distribution, capturing disproportionate share intended for steady-state stakers.
+- **FP:** Minimum stake duration requirement (cooldown). Time-weighted reward calculation. Reward snapshot at previous block. Anti-flash-loan modifier (`require(block.number > depositBlock)`).
+
+**286. Stale Reward Index After Distribution**
+
+- **D:** Reward distribution updates global reward pool but fails to call `updateReward()` / update `rewardPerTokenStored`. Stale index causes incorrect reward calculations for all users until next state-changing call.
+- **FP:** `updateReward()` called in all reward-distributing functions via modifier. Global index updated atomically with distribution. Post-distribution assertions verify consistency.
+
+**287. Balance Caching Issues During Reward Claims**
+
+- **D:** Claiming rewards reads user balance, performs external token transfer, then uses the cached balance for further calculations. Reentrant callback during transfer can manipulate state between read and use.
+- **FP:** `nonReentrant` on all claim functions. Balance read after transfer completes. CEI pattern followed — state updates before external calls.
+
+**288. Liquidation Bonus Exceeds Available Collateral**
+
+- **D:** Fixed liquidation bonus (e.g., 110% of debt in collateral) exceeds actual collateral when position is deeply underwater. Liquidation reverts because contract tries to transfer more than available, leaving bad debt permanently stuck.
+- **FP:** Dynamic bonus capped at available collateral. Liquidation function handles partial recovery gracefully. Insurance fund covers shortfall. `min(bonus, availableCollateral)` pattern used.
+
+**289. Incorrect Decimal Handling in Multi-Token Liquidations**
+
+- **D:** Liquidation calculations assume uniform 18-decimal tokens but collateral/debt have different decimals (USDC=6, WETH=18). Order-of-magnitude errors in liquidation amounts — either liquidating too much or too little.
+- **FP:** Per-token `decimals()` normalization in all cross-token math. Explicit `10 ** (18 - decimals())` scaling factors. Tested with mixed-decimal token pairs.
+
+**290. Interest Accrual During Liquidation Auction**
+
+- **D:** While collateral is being auctioned (Dutch auction, English auction), borrower's debt continues accruing interest. Long auctions make the position progressively worse, potentially causing auction proceeds to be insufficient.
+- **FP:** Interest frozen at auction start timestamp. Auction duration bounded. Instant liquidation (no auction). Interest-inclusive reserve price.
+
+**291. No Liquidation Slippage Protection**
+
+- **D:** Liquidator calls `liquidate()` but received collateral amount has no minimum parameter. MEV bot sandwiches the liquidation tx, extracting value via collateral price manipulation.
+- **FP:** `minCollateralReceived` parameter in liquidation function. Private mempool for liquidation txs. Protocol-operated liquidation bot with MEV protection.
+
+**292. L2 Sequencer Downtime in Interest Accrual**
+
+- **D:** Interest rate calculations use `block.timestamp` delta without accounting for L2 sequencer downtime periods. If sequencer is down for hours, the first post-restart block has a massive timestamp gap, compounding interest as if the protocol was operating normally.
+- **FP:** Interest accrual capped per-update (`maxTimeDelta`). Sequencer uptime feed checked before accruing. Rate-limited compounding.
+
+**293. Precision Loss in Reward-to-Token Conversion**
+
+- **D:** Staking reward calculations use `rewardRate * timeElapsed / totalStaked` where small stakes produce zero due to integer division. Small stakers permanently receive zero rewards despite time passing.
+- **FP:** Scaling factor applied (e.g., multiply by 1e18 before division). Minimum stake size enforced above precision loss threshold. Accumulator-based reward tracking.
+
+**294. Time Unit Confusion in Interest Calculations**
+
+- **D:** Interest accrual logic confuses time units — using `block.timestamp` (seconds) in a formula expecting days or blocks, or vice versa. Results in interest rates off by orders of magnitude (e.g., 365x too high or 86400x too low).
+- **FP:** Documented time unit constants (`SECONDS_PER_YEAR = 365.25 days`). Unit tests with known interest calculations. Consistent use of `block.timestamp` (seconds) throughout.
+
+**295. Oracle Manipulation via Self-Liquidation**
+
+- **D:** User manipulates oracle price via flash loan (push TWAP or spot price), self-liquidates via second address at the manipulated price, extracts more collateral than debt owed. Profitable when manipulation cost < liquidation bonus.
+- **FP:** TWAP with window > manipulation cost threshold. Chainlink/Pyth oracle resistant to single-tx manipulation. Self-liquidation blocked (`require(liquidator != borrower)`).
+
+**295A. Same-Account Self-Liquidation Storage Aliasing**
+
+- **D:** Liquidation code treats borrower and liquidator balances as independent locals, but attacker can set `borrower == liquidator` and optionally `assetBorrow == assetCollateral`, making both locals resolve to the same `(account, asset)` storage slot. The function computes `borrowerBalance - seized` and `liquidatorBalance + seized` separately, then writes them back sequentially; the later write overwrites the earlier one and mints or preserves collateral/value. Common shape: borrower collateral and liquidator collateral both read from `balances[user][asset]` under attacker-chosen equality conditions.
+- **FP:** Self-liquidation blocked explicitly (`require(liquidator != borrower)`) or same-market same-account path is proven to net against one shared balance before any writeback. If aliasing is allowed, code consolidates to a single storage reference and a single net write.
+
+**296. On-Chain Quoter-Based Slippage Calculation**
+
+- **D:** `minAmountOut` calculated on-chain using current spot price from an AMM quoter. Flash loan manipulates spot price before the tx, setting `minAmountOut` to near-zero, then sandwiches the actual swap.
+- **FP:** `minAmountOut` supplied as calldata parameter from off-chain calculation. TWAP-based quoting. Maximum acceptable slippage hardcoded as percentage.
+
+**297. Fixed Fee Tier Assumption in Multi-Pool DEX**
+
+- **D:** Router hardcodes fee tier (e.g., Uniswap V3 0.3% pool) but liquidity migrates to different tier (0.05% or 1%). Swaps execute against low-liquidity pool with excessive slippage or revert.
+- **FP:** Fee tier as function parameter. Router queries multiple tiers and uses optimal. Dynamic fee tier detection via factory query.
+
+**298. Multi-Hop Swap Intermediate-Only Protection**
+
+- **D:** Multi-hop swap (A→B→C) protects intermediate amount (B) but not final output (C). MEV extracts value on the final hop where no minimum is enforced.
+- **FP:** `minFinalAmountOut` validated against user's actual received balance (balance delta check). Single-hop swap. Per-hop minimums specified by caller.
+
+**299. block.timestamp as Swap Deadline**
+
+- **D:** `deadline = block.timestamp` provides zero deadline protection since every block's timestamp satisfies it. Tx can be held in mempool indefinitely and executed at the worst possible time.
+- **FP:** Deadline supplied as calldata from off-chain (e.g., `now + 300 seconds`). Keeper-based execution with enforced timeliness. Private mempool.
+
+**300. Zero minAmountOut on DEX Swap**
+
+- **D:** `swap(tokenIn, tokenOut, amountIn, 0)` — hardcoded zero minimum output. Completely unprotected from MEV/sandwich attacks. Often found in reward harvesting, fee conversion, or liquidation collateral sale paths.
+- **FP:** `minAmountOut` parameter exposed to caller or computed from oracle. Internal-only swap with access control. Documented acceptance of slippage risk for small amounts.
+
+**301. Transient Storage Reentrancy Guard in Delegatecall Context**
+
+- **D:** Reentrancy guard uses `TSTORE`/`TLOAD` but in a delegatecall proxy context. Transient storage is per-address, not per-contract — proxy's transient storage is shared across all facets/implementations. Guard in one facet doesn't protect against reentry into different facet.
+- **FP:** Shared transient storage slot used by all facets (single guard). Regular storage-based reentrancy guard. No delegatecall architecture.
+
+**302. Uniswap V4 Hook Callback Authorization**
+
+- **D:** Hook contract's callback functions (`beforeSwap`, `afterSwap`, etc.) don't validate `msg.sender == poolManager`. Anyone can call hook functions directly, manipulating cached state or triggering unintended side effects.
+- **FP:** `require(msg.sender == address(poolManager))` in every callback. `onlyPoolManager` modifier. Hook uses `BaseHook` from Uniswap V4 periphery.
+
+**303. Uniswap V4 Cached State Desynchronization**
+
+- **D:** Hook caches pool state (`sqrtPriceX96`, `liquidity`, `tick`) in `beforeSwap` but state changes during the swap. `afterSwap` reads stale cached values for fee calculations or rebalancing decisions.
+- **FP:** State re-read from pool in `afterSwap`. Cache explicitly invalidated between hooks. No cross-hook state dependency.
+
+**304. Custom Access Control Without Two-Step Transfer**
+
+- **D:** Hand-rolled `setOwner(newOwner)` with single-step transfer. Typo in `newOwner` address permanently locks out admin access with no recovery mechanism.
+- **FP:** OZ `Ownable2Step` used. Multisig as owner (typo requires multiple signers). Timelock with cancel capability. Recovery mechanism via governance.
+
+**305. Inconsistent Pausable Coverage**
+
+- **D:** Contract imports `Pausable` but applies `whenNotPaused` modifier inconsistently. Some fund-moving operations (withdraw, transfer, liquidate) lack pause protection, allowing drain during emergency pause intended to freeze all operations.
+- **FP:** All state-changing functions have `whenNotPaused`. Intentionally unpaused functions documented (e.g., emergency withdraw). Pause coverage verified in tests.
+
+**306. OpenZeppelin Version Confusion (v4 vs v5)**
+
+- **D:** Contract overrides `_beforeTokenTransfer` (OZ v4 hook) while importing OZ v5, where the hook was replaced with `_update`. Override silently never executes — access control, transfer restrictions, or enumerable tracking bypassed.
+- **FP:** Confirmed OZ version consistency. Contract uses `_update` override for v5. No OZ token base inherited.
+
+**307. Approval to Arbitrary User-Supplied Address (Aggregator/Router Pattern)**
+
+- **D:** Router/aggregator calls `token.approve(userSuppliedPool, MAX_UINT)` where pool address comes from user calldata without allowlist validation. Attacker supplies malicious "pool" that calls `transferFrom` to drain all approved tokens.
+- **FP:** Pool addresses validated against factory or hardcoded allowlist. Approval limited to exact amount per operation (`approve(pool, amountIn)` followed by `approve(pool, 0)`). No persistent approvals.
+
+**308. External Call Failure DoS in Batch Operations**
+
+- **D:** Batch operation (reward distribution, multi-user withdrawal, liquidation queue) reverts entirely if any single external call fails. One blacklisted address or reverting contract blocks all users in the batch.
+- **FP:** Per-item `try/catch` with skip-on-failure. Pull-over-push pattern. Failed items queued for retry. Event emitted for failed transfers.
+
+**309. Storage Bloat Attack (Unbounded Mapping/Array Growth)**
+
+- **D:** Attacker fills user-controlled mappings/arrays without economic limits (e.g., `userTokens[user].push(attacker_token)` for each of thousands of fake tokens). Functions iterating over this array hit block gas limit.
+- **FP:** Array size bounded (`require(arr.length < MAX)`). Economic deterrent (cost per entry). Pagination for iteration. EnumerableSet with bounded operations.
+
+**310. Timestamp Griefing (Lock Period Reset by Third Party)**
+
+- **D:** Any address can trigger a timestamp reset on another user's lock. Pattern: `deposit(address user, uint256 amount)` where `amount` can be 1 wei and resets `lockExpiry[user] = block.timestamp + LOCK_DURATION`. Attacker calls `deposit(victim, 1)` perpetually extending victim's lock.
+- **FP:** Lock timestamp only updatable by the locked user themselves. Minimum deposit enforced. Lock extension only possible, never reset (uses `max(existing, new)`).
+
+**311. Self-Destruct Force-Feed Breaking Strict Balance Equality**
+
+- **D:** Contract uses `require(address(this).balance == expectedBalance)` with strict equality. Attacker force-feeds ETH via `selfdestruct(target)`, permanently breaking the equality check and DoS-ing the function.
+- **FP:** Internal balance tracking (never reads `address(this).balance` for logic). Uses `>=` or `<=` comparisons. Contract designed to accept arbitrary ETH.
+
+**312. Inconsistent Guard Coverage Across Semantically Equivalent Functions**
+
+- **D:** Contract has multiple functions that perform the same logical operation (e.g., `transfer` and `transferFrom`, or `deposit` and `depositFor`) but security guards (pause, reentrancy, access control) are only applied to one. Attacker uses the unguarded variant.
+- **FP:** Shared internal function with guards called by all public variants. Modifier applied uniformly. Single entry point for each operation.
+
+**313. Missing Initialization of Inherited State in Upgradeable Contracts**
+
+- **D:** Upgradeable contract calls `__Ownable_init()` but forgets to call `__ReentrancyGuard_init()`, `__Pausable_init()`, or other inherited initializers. Reentrancy guard status is 0 (uninitialized), which may not provide protection. Pausable state is unpredictable.
+- **FP:** All inherited `__*_init()` functions called in `initialize()`. OZ Upgradeable contracts used with complete initialization chain. Tests verify all state correctly initialized post-deployment.
