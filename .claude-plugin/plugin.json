@@ -1,0 +1,10 @@
+{
+  "name": "pashov-skills",
+  "description": "Solidity security skills from Pashov Audit Group — solidity-auditor and x-ray",
+  "version": "3.0.0",
+  "author": "pashov",
+  "repository": "https://github.com/pashov/skills",
+  "license": "MIT",
+  "keywords": ["solidity", "security", "audit", "smart-contracts", "x-ray"],
+  "skills": ["./solidity-auditor", "./x-ray"]
+}
