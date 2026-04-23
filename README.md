@@ -27,6 +27,8 @@ run the solidity auditor with all the different agents possible on *specified fi
 update skills to latest version
 ```
 
+**Claude Code plugin install:** `/plugin marketplace add pashov/skills` then `/plugin install pashov-skills`
+
 ---
 
 ## Skills
