@@ -137,3 +137,14 @@ _Vulnerability trails with concrete code smells where the full exploit path coul
 ````
 
 **Rules:** Follow the template above exactly. Every finding title line MUST start with a bracketed confidence tag like `[98]`, `[95]`, `[82]`. Every finding MUST include a **Status** block and a concrete **PoC Concept** block. Findings below the threshold get no **Fix** block, but they still MUST keep the confidence tag, status block, and PoC block. Sort findings by confidence (highest first). The attacker profitability conclusion must be present and must address unprivileged attacker profit specifically, not generic risk. Draft findings directly in report format — do not re-generate. Do not replace the report with a prose summary.
+
+Additional live-corroboration rule:
+
+- If a supplied tx hash / explorer link / trace is reconciled to the same source bug, the finding text MUST say so directly in either **Description** or **PoC Concept**.
+- In that case, `Live on this deployment` cannot remain `Unknown`.
+- The final finding text MUST explicitly mention any live-only exploit legs that materially changed confidence or severity, such as a day-boundary branch, threshold-crossing bug, helper/distributor realization step, fee-processing side effect, or reserve-sync sequence.
+
+Additional preventive-audit rule:
+
+- A finding may be reported as `Live on this deployment: Yes` from source + dependency + live-state modeling alone; a historical exploit transaction is **not required**.
+- Do not downgrade a source-complete, reserve-validated, publicly profitable path merely because no exploit tx was supplied.

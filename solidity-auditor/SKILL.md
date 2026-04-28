@@ -30,6 +30,48 @@ If the user provides any of the following, treat them as **optional corroboratin
 - named attacker/helper/orchestrator addresses
 
 These artifacts may help confirm or falsify a source-derived exploit path, but they must never replace source-level exploit reconstruction. The default objective is preventive auditing: determine what the code allows before relying on any historical evidence.
+
+## Preventive-audit rule (MANDATORY)
+
+The baseline job is still **preventive exploit detection**, not post-mortem matching.
+
+That means:
+
+- You MUST try to find and validate public exploit paths from source, dependency closure, and live state even when the user provides **no** transaction hash.
+- A user-supplied exploit tx is only an accelerator for confidence and live-status refinement; it is never a prerequisite for discovering or reporting the bug.
+- If a source-derived public exploit candidate is high-signal and the live deployment is discoverable, you MUST proactively perform live exploitability checks before finalizing. Do not wait for the user to supply a tx.
+
+Mandatory proactive validation for every high-signal public candidate:
+
+1. resolve the live deployment address if it is provided or discoverable from the target bundle
+2. inspect the live config, reserves, balances, pair addresses, roles, and thresholds that control the candidate path
+3. model whether the path is economically positive under live state
+4. if the path is AMM / reserve / fee / liquidation / pricing sensitive, reconcile the modeled extraction against live reserves and threshold logic
+5. if the path looks immediately live, search for corroborating recent exploit evidence or suspicious matching transactions before finalizing severity
+
+You must not leave a finding at a weakly supported middle state like:
+
+- "root cause found but exploitability unclear"
+- "likely live but not checked"
+- "unknown live status"
+
+when the missing work is simply live-state or explorer validation that you could have done yourself.
+
+### Mandatory upgrade when a live exploit transaction is supplied
+
+If the user provides a concrete exploit transaction hash, explorer link, trace, or step-by-step live RCA for the same target, that artifact stops being "nice to have" context and becomes **mandatory corroboration work before finalizing severity, confidence, and live status**.
+
+In that case you MUST:
+
+1. Fetch the transaction / trace / explorer record.
+2. Reconstruct the exact live call chain and state transitions.
+3. Reconcile the live path against the source-derived root cause.
+4. Update the final finding so that:
+   - `Live on this deployment` is **Yes** if the tx proves the same source bug was exploited live.
+   - confidence is upgraded when the tx arithmetic and call sequence match the source path.
+   - the finding text explicitly names every live-only exploit leg that mattered (for example: day rollover branches, threshold crossing, helper realization, fee-processing side effects, reserve sync points).
+
+It is NOT acceptable to leave a finding at `Live on this deployment: Unknown` once a supplied exploit tx has been source-reconciled and confirms the same bug family.
 ## Orchestration
 
 **Turn 1 — Discover.** Print the banner, then make these parallel tool calls in one message:

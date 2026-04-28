@@ -22,12 +22,27 @@ For any issue that may be economic or profitable, fill this mini-table before ga
 
 If any row is missing or unclear, profitability is **not confirmed**.
 
+If the user supplied a transaction hash, explorer link, or RCA that appears to be a real exploit of the same target, add two more mandatory pre-check rows:
+
+- `corroborating tx/hash/link`
+- `source path matched by tx`
+
+If the tx matches the same source-level bug, the issue cannot be left at `Live: Unknown`.
+
+Before Gate 1, also answer:
+
+- `did I proactively validate live exploitability myself`
+- `if not, what exact blocker prevented that validation`
+
+If there is no real blocker, the audit is incomplete.
+
 Before Gate 1, discovery must also answer:
 
 - what assumption is being inverted
 - what non-standard path is being tested
 - whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
 - whether every external dependency on the value path was actually analyzed, rather than being left as an unresolved “external contract” note
+- whether live-state validation was proactively performed for each high-signal public candidate, even without a user-supplied tx
 - whether live proxy addresses and implementation contracts were resolved when the user supplied them or when they were discoverable from deployment context
 - whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
 - whether a contract uses one security-critical path for `transfer()` but leaves `transferFrom()` or `_transfer()` inherited, allowing router / allowance / permit flows to bypass the advertised policy layer
@@ -56,6 +71,9 @@ Before Gate 1, discovery must also answer:
 - whether any external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, or selector-only low-level call remains unresolved even though it sits on a deposit / withdraw / mint / burn / claim / liquidation / settlement path
 - whether the same mutable price source is used to create a claim in one arithmetic direction and redeem it later in the opposite direction, such as `deposit/mint: amount * price` and `withdraw/redeem: claim / later_price`, or the inverse
 - whether any supplied tx hash, block number, trace, or RCA was used only as corroboration for a source-derived exploit path rather than as a substitute for source analysis
+- whether you proactively searched for corroborating live evidence when the candidate already looked immediately live from source plus reserves/config
+- whether a supplied exploit tx was fully reconciled against the source path before finalizing `Live on this deployment`, confidence, and severity
+- whether the tx exposed extra exploit legs not obvious from a superficial source read, such as day-boundary branches, threshold crossing, queued-state realization, fee-processing side effects, or reserve updates inside the same path
 - whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
 - for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
   - inventory source
@@ -116,13 +134,16 @@ Prove the vulnerable state exists in a live deployment.
 - If a critical external dependency could not be analyzed because source is missing or tooling failed, do not silently clear the path; keep the audit explicitly incomplete on that family
 - If the user supplied live addresses or deployment context that makes the dependency fetchable, failure to fetch the implementation/source is a tooling gap to report explicitly, not a reason to stop at the wrapper
 - If optional corroborating material matches the cross-contract source path and no concrete guard refutes it, do not reject or demote solely because the bug spans multiple contracts
+- If a supplied exploit tx matches the same root cause, this gate is automatically cleared for live reachability unless the tx is proven unrelated
 - If the exploit depends on configurable parameters or reserve ratios, test reachable defaults, allowed config bounds, and normal reserve skews before rejecting
+- If the live deployment address is known or discoverable, and the issue depends on reserves, balances, fee tiers, caps, roles, day boundaries, snapshots, or thresholds, you must check them before finalizing
 - If the system is a fork of a known protocol, do not reject inherited issue classes until the source diff proves the critical invariant changed
 - For live audits, verify the actual onchain config values before treating a code bug as active
 - If live role holders are EOAs / multisigs with no public takeover path, keep the issue in `Privileged / Centralization`, not `Public Exploitable`
 - Achievable through normal usage or common token behaviors → **clears**, continue
 - Payable `receive()` / `fallback()` entrypoints, flash loans, router callbacks, and helper-contract claims are normal reachable behavior when the code exposes them
 - Unusual but legal call ordering, first-write-wins poisoning, direct helper entry, and purpose-built exploit wallets are normal reachable behavior when public functions permit them
+- If these behaviors appear immediately live from source, reserve state, and config, you must attempt corroboration from explorer / trace / historical transactions even when the user did not supply a tx
 - Constructor-time helper contracts are normal reachable behavior when public functions rely on `isContract`, `extcodesize`, or `code.length == 0` assumptions
 - EOA-only assumptions are not enough to demote reachability when delegated-EOA or account-abstraction semantics could exercise the same public path
 - Empty-market / first-depositor / share-inflation / donation-boosted bootstrap states are normal reachable behavior if the protocol can launch or interact while depth is near zero
@@ -142,11 +163,13 @@ Prove an unprivileged actor executes the attack.
 - A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
 - A single loss-making sample at one parameter point is not enough to reject a pair-burn / reserve-destruction exploit with a complete source-level trace
 - A single harmless sample does **not** refute approximation bias, midpoint/average pricing, or micro-edge compounding on a nonlinear curve; repeated iterations and callback-loop execution must be checked
+- If a modeled path is profitable under live state and uses only public functions plus market liquidity, treat it as confirmed triggerable even without a historical exploit tx
 - Unprivileged actor triggers profitably → **clears**, continue
 - If the protocol's intended restrictions live only in `transfer()`, treat standard router `transferFrom()` flow as the default public trigger path unless the code explicitly overrides or re-routes it
 - If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
 - If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
 - If optional corroborating material matches the call chain plus arithmetic in source, that is supporting trigger evidence even when some dependencies were fetched from explorers rather than the local repo
+- If a supplied exploit tx shows the same public trigger and value-out path, do not leave trigger status, live status, or profitability as `Unknown`
 - If a helper/router/vault/distributor performs the real swap or payout, the helper's live balances, approvals, and recipients are part of the same trigger analysis
 - If a helper/mining/distributor contract is the public trigger that realizes a deferred reserve mutation on the token or pair, treat that helper as part of the same exploit path rather than as a separate privileged dependency
 - If source-backed code proves queue creation, pair-side realization, and reserve refresh, do not demote solely because the upstream helper contract is decompiled or unverified; instead lower confidence only to the extent that the public trigger remains uncertain
@@ -170,8 +193,13 @@ For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
 - Do reserve updates use gross input while output pricing uses net-after-fee input, or any other mismatched effective amount?
 - Is the path dead, dormant, or immediately live?
 - Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
+- If the user supplied a live exploit tx on the same market / pool / vault, do the tx reserves, quoted outputs, and realized outputs reconcile with the modeled exploit arithmetic?
 
 If reserve depth, threshold reachability, and realistic round-trip costs were not checked, attacker profitability is **not confirmed**.
+
+If those values were checked and a supplied exploit tx matches the modeled source path, attacker profitability is **confirmed** for that live configuration.
+
+If those values were checked and the modeled path is already profitable under live state using only public actions, attacker profitability is also **confirmed** even with no historical exploit tx.
 
 ## Gate 3.51 — Price-Path Asymmetry Check
 
