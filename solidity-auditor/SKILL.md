@@ -278,19 +278,13 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - **Profit conversion attempts**:
        - if the initial issue looks like griefing, list ways it could become profit via front-run/back-run, self-referral, attacker-controlled sink, temporary role capture, flash loan, or purpose-built contract wallet
        - if value is redirected to protocol sinks, test whether attacker can first become or influence that sink
-       - explicitly test collusion / role-collapse variants where the same economic actor controls two or more addresses that play different protocol roles, such as payer + griefer, buyer + receiver, liquidator + beneficiary, distributor + recipient, or claimer + referrer
-       - explicitly test malicious-obligor variants where the attacker's profit comes from avoiding an owed payout, distribution, refund, settlement payment, collateral top-up, debt repayment, or delivery obligation while still flipping protocol state to `distributed`, `settled`, `completed`, `paid`, `filled`, or equivalent
-       - if the bug can advance status, totals, checkpoints, epochs, vesting, distribution progress, or settlement flags without moving the intended assets, test whether any onchain or offchain component would treat that state as final and release value, reputation, inventory, unlock rights, or future payouts elsewhere
-       - if the attacker does not directly receive protocol-held funds, still test whether the attacker profits by retaining inventory, escaping liabilities, avoiding fees, preserving collateral, shifting losses to recipients, or creating a free option that can be monetized later
-     - **State-finality / obligation-evasion checks**:
-       - whether any public or weakly-gated function can mark work as done (`distributed`, `settled`, `fulfilled`, `cancelled`, `paid`, `completed`, `claimed`, `processed`) before the intended asset movement is proven
-       - whether the state transition is keyed off requested amount, rounded amount, counters, indexes, hashes, signatures, or booleans rather than actual transferred value
-       - whether the actor who can trigger finality is the same actor economically obligated to provide assets, or can collude with that actor through another address
-       - whether a malicious payer, distributor, seller, borrower, liquidator, or order maker can use two addresses so one satisfies the business role and the other triggers the buggy public completion path
-       - whether recipients, counterparties, offchain operators, or downstream contracts lose the ability to recover once the bad finality bit is set
-       - whether retries, top-ups, cancellations, or alternative settlement paths are blocked once the protocol believes the action is complete
-       - whether a zero-transfer, partial-transfer, fee-on-transfer, or floor-rounded transfer can still consume the full entitlement or mark the full obligation as satisfied
-       - whether later logic trusts cumulative totals or status flags without reconciling actual token/ETH deltas
+       - test role-collapse variants where one economic actor controls multiple protocol roles, such as payer + public caller, buyer + receiver, liquidator + beneficiary, distributor + recipient, or claimer + referrer
+     - **False-finality / obligation-evasion checks**:
+       - whether a public or weakly-gated path can set terminal state (`distributed`, `settled`, `fulfilled`, `cancelled`, `paid`, `completed`, `claimed`, `processed`) before actual token/ETH/NFT movement is reconciled
+       - whether terminal state is keyed off requested amount, rounded amount, counters, indexes, hashes, signatures, or booleans rather than actual transfer deltas
+       - whether the party expected to pay, deliver, repay, settle, or top up can collude with the caller that triggers terminal state
+       - whether terminal state blocks retry, recovery, cancellation, or alternative settlement while the obligor keeps inventory or avoids liability
+       - whether downstream onchain/offchain components trust that state as authoritative
      - **Reward / solvency accounting pass**:
         - whether a new deposit, fee, or `netValue` is counted both as immediately distributable reward and as fully withdrawable principal / share value
         - whether reward accrual increases liabilities without creating segregated backing assets or reserves
@@ -555,7 +549,7 @@ Read the bundle fully before producing findings.
 You must include at least one non-standard / unusual exploit attempt from the discovery checklist, even if it is later rejected.
 If the bundle contains any mint / redeem / borrow / repay / liquidate logic, you must explicitly test same-address and same-asset aliasing cases and report the outcome, even if no bug is found.
 For liquidation systems specifically, test `borrower == liquidator` and `assetBorrow == assetCollateral` as mandatory source-level cases before concluding the path is safe.
-Do not stop at isolated bugs. Try to compose weak signals across contracts, roles, status flags, time delays, offchain finality, and helper calls. For at least one candidate, model a malicious obligor or colluding two-address actor, then either complete the profit/obligation-evasion path or state the exact guard that blocks it.
+Compose weak signals that share an id, asset, role, status flag, helper, dependency, or time boundary. For at least one candidate, test a two-role attacker model and state either the exploit path or the exact guard that blocks it.
 ```
 
 **Turn 4 — Deduplicate, validate & output.** Single-pass: deduplicate all agent results, gate-evaluate, and produce the final report in one turn. Do NOT print an intermediate dedup list — go straight to the report.
@@ -571,12 +565,11 @@ Before report formatting, perform a **Critical Surface Completion Review**:
 
 1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
 
-   Check for **composite chains** before any rejection:
+   Check for **composite chains** before final rejection:
    - if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B)
    - if two LEADs share an id, asset, role, finality flag, accounting bucket, helper, oracle, allowance holder, or time boundary, attempt one combined exploit reconstruction before leaving both as separate leads
-   - if the combined chain turns a griefing/DoS symptom into inventory retention, debt escape, false settlement, bad liquidation, borrow-power creation, claim replay, or reserve reclassification, evaluate the combined chain as its own candidate
-   - if a malicious payer / distributor / maker / borrower / liquidator using two addresses makes the economics profitable, do not describe the issue as non-profitable outsider griefing without also recording that conditional profit model
-   Most audits have 0-2 confirmed composite chains, but every audit must perform the synthesis pass.
+   - if the combined chain turns griefing into inventory retention, debt escape, false settlement, bad liquidation, borrow-power creation, claim replay, or reserve reclassification, evaluate the combined chain as its own candidate
+   Most audits have 0-2 confirmed composite chains, but every audit must attempt this synthesis pass.
 
 2. **Gate evaluation.** Run each deduplicated finding through the four gates in `judging.md` (do not skip or reorder). Evaluate each finding exactly once — do not revisit after verdict.
 
@@ -602,8 +595,6 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - `permission required`
    - `recipient of value`
    - `why attacker gets paid`
-   - `who was supposed to pay / deliver / repay / settle`
-   - `whether profit is extracted funds or avoided obligation`
    If any field cannot be completed from source and live state, do not mark the issue as attacker-profitable.
 
    **Single-pass protocol:** evaluate every relevant code path ONCE in fixed order (constructor → setters → swap functions → mint → burn → liquidate). One-line verdict per path: `BLOCKS`, `ALLOWS`, `IRRELEVANT`, or `UNCERTAIN`. Commit after all paths — do not re-examine. `UNCERTAIN` = `ALLOWS`.

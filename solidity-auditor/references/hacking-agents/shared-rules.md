@@ -22,9 +22,8 @@ If a contract can mutate pair inventory and then call `sync()` / reserve refresh
 After scanning: escalate every finding to its worst exploitable variant (DoS may hide fund theft). Then revisit every function where you found something and attack the other branches.
 Equality conditions are attack surface. If two roles, accounts, assets, ids, or buckets can be attacker-chosen to the same value, assume aliasing until the code proves otherwise. For any mint / redeem / borrow / repay / liquidate path, explicitly test whether two local storage references can resolve to the same slot and whether sequential writes still net correctly.
 For hook-driven tokens and router/pair systems, reconstruct this exploit chain before dropping or demoting a candidate: `how inventory is sourced -> how bad state is queued -> how queued state is realized -> how the final reserve distortion is monetized`.
-Do not leave weak signals isolated. If two leads share an id, asset, status flag, role, approval, helper, dependency, time boundary, or storage bucket, synthesize one combined exploit attempt before final output.
-For every apparent griefing, rounding, completion, settlement, cancellation, or distribution issue, test a malicious-obligor model: one attacker-controlled address is the party expected to pay/deliver/repay, another address triggers the public bug, and profit comes from retaining inventory or escaping liability.
-False finality is value-relevant. If code can mark `paid`, `distributed`, `settled`, `completed`, `cancelled`, `claimed`, or equivalent without reconciling actual token/ETH/NFT movement, treat it as a candidate exploit surface until recovery, retry, and downstream-finality paths are proven safe.
+Compose weak signals before dropping them. If two leads share an id, asset, status flag, role, approval, helper, dependency, time boundary, or storage bucket, synthesize one combined exploit attempt.
+False finality is value-relevant: if code can mark `paid`, `distributed`, `settled`, `completed`, `cancelled`, or `claimed` without reconciling actual token/ETH/NFT movement, test payer-caller collusion and recovery/retry behavior before demotion.
 
 ## Do not report
 

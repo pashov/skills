@@ -116,7 +116,7 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 [These are **mechanism-first audit leads**, not full exploit writeups. Your job is to state the concrete state, value, accounting, pricing, or trust-boundary relationship that deserves exploit reconstruction. Avoid passive prompts; every bullet must be falsifiable from code and live-state checks.]
 [No RISK labels (HIGH/MEDIUM/LOW). No mitigation analysis. No git evidence per surface.]
 [Priority override: if a public or unresolved path can destroy / move inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh reserves, list that surface first unless a stronger public cash-out path is already confirmed.]
-[Composite override: if two individually weaker facts compose through a shared id, status, role, approval, asset, reserve bucket, dependency, or time boundary, write the combined mechanism as one surface instead of burying the facts separately. Especially preserve false finality, malicious-obligor profit, colluding-address role collapse, preview-vs-execution drift, and raw-balance-vs-accounting drift.]
+[Composite override: if weaker facts compose through a shared id, status, role, approval, asset, reserve bucket, dependency, or time boundary, write the combined mechanism as one surface instead of burying the facts separately.]
 
 - **[Surface name]** &nbsp;&#91;[X-N](invariants.md#x-n), [I-N](invariants.md#i-n)&#93; — [one tight sentence: code ref + the concrete mechanism/asymmetry/trust boundary + the state or value relationship to falsify. Aim for 1 line, max 2.]
 
@@ -133,7 +133,7 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 [❌ Not: `- **globalEpochEnds desynced from totalLockedAtEpochEnd** — _subtractFromEpochEndLocked:117-138 pops the array unconditionally; expired mass at shared epochs never lands in accExpiredLocks → understated decay → inflated global bias.` (This spells out the exploit chain — "never lands in", "understated", "inflated" — leaving the auditor nothing to discover.)]
 
 [FRAMING RULE: Attack surfaces should be named after the root threat area, not individual symptoms or final impact labels. E.g., "SERVICE_ROLE compromise" is a surface — missing pausability on completeSwap is a detail that sits inside it. "Admin operational powers without timelock" is a surface — individual setters are evidence within the description. "Reward accounting crosses user/global symmetry" is a surface — numerator/denominator divergence should be named concretely without asserting the final drain. Frame surfaces as the actor/capability/pattern that deserves exploit reconstruction.]
-[COMPOSITION RULE: When a surface depends on a second contract, helper, offchain actor, or later state transition, name that connector directly. Example: `Distribution progress trusts requested amount while token deltas can floor to zero; downstream finality consumers must reconcile actual ERC20 movement before treating deal state as complete.`]
+[COMPOSITION RULE: When a surface depends on a second contract, helper, offchain actor, or later state transition, name that connector directly.]
 
 ### Upgrade Architecture Concerns
 

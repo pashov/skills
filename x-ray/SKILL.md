@@ -19,9 +19,8 @@ Rules:
 - Do not write a full exploit conclusion unless the path was verified end-to-end; stop at the concrete mechanism, invariant gap, accounting asymmetry, or trust-boundary violation.
 - When a path is unresolved, name the exact missing artifact or unverified dependency and keep the surface high-priority if it controls value movement, price setting, or shared reserve mutation.
 - Attack surfaces must be falsifiable: each bullet should contain a code reference plus the specific state, value, or dependency relationship that can be tested.
-- Do not treat each code smell in isolation. When two or more weak signals share an asset, record id, status enum, balance bucket, role, external dependency, or time boundary, synthesize the combined exploit hypothesis before deciding priority.
-- For every "just griefing" or "not directly profitable" mechanism, test whether a malicious obligor, colluding counterparty, referrer, receiver, liquidator, keeper, or offchain actor can profit by avoiding payment, forcing false completion, retaining inventory, or shifting losses.
-- Prefer mechanism chains over isolated labels: `status advances from requested amount while token delta can be zero` is stronger than `rounding issue`.
+- Compose related weak signals before prioritizing surfaces: shared ids, assets, status flags, roles, approvals, reserve buckets, dependencies, or time boundaries often matter more than isolated symptoms.
+- Treat false-finality and obligation-evasion mechanisms as economic surfaces when state can advance without proving the intended asset movement.
 
 ## Progress tracking (MANDATORY)
 
@@ -352,11 +351,11 @@ Using the delta writes, guard predicates, enum/one-shot transitions, and invaria
 
 **Output**: Invariant candidates feed directly into `invariants.md` (Step 3a). x-ray.md Section 3 gets Enforced Guards (Reference) + top 3-5 inferred (prioritize On-chain=No from Conservation, Cross-Contract, and lifted-guard gaps; include one high-signal Yes row for structural coverage like a ratio or state-machine latch).
 
-### Step 2h: Composite Exploit Hypothesis Synthesis
+### Step 2h: Composite Surface Synthesis
 
-Before writing output, perform a short synthesis pass across the facts already collected in Step 2. This is not a report-writing flourish; it decides which surfaces deserve priority.
+Before writing output, perform a short synthesis pass across the facts already collected in Step 2. This decides which surfaces deserve priority.
 
-Build a `Composite Hypothesis Matrix` with 5-12 rows. Each row combines at least two weak signals that share a concrete connector:
+Build up to 8 composite rows. Each row must combine at least two weak signals through a concrete connector:
 - shared storage key, id, enum state, accounting bucket, token, approval holder, dependency, role, caller identity, deadline, or offchain finality assumption
 - permissionless entry point plus role-gated downstream function reachable through a trusted helper
 - status/finality bit plus asset-transfer delta
@@ -368,16 +367,15 @@ Build a `Composite Hypothesis Matrix` with 5-12 rows. Each row combines at least
 
 For each row, record:
 - `connector`: the shared variable, id, asset, role, dependency, or time boundary
-- `signals`: the two or more code facts being composed
-- `attacker role model`: outsider, malicious obligor, colluding counterparty, keeper/searcher, receiver/sink controller, privileged-only, or unresolved
-- `candidate chain`: primitive -> corrupted state/accounting/finality -> possible extraction or obligation evasion
+- `signals`: the composed code facts
+- `role model`: outsider, malicious obligor, colluding counterparty, keeper/searcher, receiver/sink controller, privileged-only, or unresolved
+- `candidate chain`: primitive -> corrupted state/accounting/finality -> extraction or obligation-evasion hypothesis
 - `hard refutation needed`: the exact guard, balance reconciliation, dependency behavior, or live-state fact that would kill the chain
 
 Use this matrix to prioritize Key Attack Surfaces:
-- if a composite row can plausibly touch protocol custody, shared reserves, borrow power, liquidation, claimability, settlement finality, or distribution finality, it outranks isolated style or admin concerns
+- if a composite row touches protocol custody, shared reserves, borrow power, liquidation, claimability, settlement finality, or distribution finality, it outranks isolated style or admin concerns
 - if a row is blocked only by an unresolved value-moving dependency, keep it as a high-priority unresolved surface and name the dependency
 - if a row is disproven by a concrete guard or exact state reconciliation, do not write it as a surface
-- if a row looks like griefing, still model malicious-obligor and colluding-address profit before demoting it
 
 The matrix itself does not need to be printed unless it materially helps the reader. Its conclusions must be reflected in `x-ray.md` Key Attack Surfaces and, where factual, in `entry-points.md` flow paths.
 
@@ -420,7 +418,7 @@ All output files go into the `x-ray/` directory. Write ALL FOUR files in a SINGL
 When writing **Key Attack Surfaces**, apply this priority override:
 - if the code exposes a public or unresolved path that can burn / skim / transfer inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh / finalize reserves, that surface must appear before softer accounting, admin, or DoS surfaces unless a stronger public cash-out path is already confirmed
 - if economics for that reserve-destruction path are not yet fully closed, write it up explicitly as an unresolved primary surface rather than burying it behind easier but lower-impact issues
-- if the Step 2h composite matrix shows that two individually low/medium signals combine into false finality, obligation evasion, borrow-power creation, claim replay, reserve reclassification, or cross-contract accounting drift, rank the composite surface above either individual symptom
+- if the Step 2h composite matrix shows that isolated signals combine into false finality, obligation evasion, borrow-power creation, claim replay, reserve reclassification, or cross-contract accounting drift, rank the composite surface above either individual symptom
 - every surface must name the concrete mechanism, not an audit instruction; banned forms include `worth checking`, `worth tracing`, `worth confirming`, `may be exploitable`, and `consider reviewing`
 - unresolved surfaces must say what remains unresolved and why it matters to the value path; do not demote them only because the final extraction leg was not proven during x-ray
 
