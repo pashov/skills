@@ -14,6 +14,14 @@ Other agents cover logic, state, and access control. You exploit the math.
 
 **Amplify truncation.** Find division-before-multiplication chains — intermediate truncation amplified by later multiplication. Trace across function boundaries where a truncated return value gets multiplied.
 
+**Attack nonlinear curves.** If price is derived from `ln`, `exp`, `pow`, sigmoid, bonding-curve, or any nonlinear formula, test whether execution uses a midpoint / average-price approximation instead of the true integral. Small directional bias per swap becomes exploitable when repeated.
+
+**Test alternating round-trips.** For every custom swap curve, run concrete `A -> B -> A` examples and repeat them. A tiny positive bias per round trip is still a FINDING if it compounds into pool loss.
+
+**Sweep parameters, not just defaults.** If curve shape, fee rate, anchors, scalar roots, or reserve ratios are configurable, test the reachable bounds and realistic skews. One loss-making sample at default settings does not clear a source-level pricing bug.
+
+**Check fee-consistency.** Compare the amount used in pricing math to the amount written into reserves / inventory. If output is computed from post-fee input but reserves are updated with gross input, the fee accounting itself can create extraction.
+
 **Overflow intermediates.** For every `a * b / c`, construct inputs where `a * b` overflows uint256 before the division saves it. Use flash-loan-scale values for user-influenced operands.
 
 **Mismatch decimals.** Exploit hardcoded `1e18` on 6-decimal tokens. Underflow `18 - decimals` for >18 decimal tokens. Feed variable oracle decimals into code assuming constant decimals.

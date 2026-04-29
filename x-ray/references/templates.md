@@ -110,27 +110,30 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 
 ### Key Attack Surfaces
 
-[This is the SINGLE authoritative location for attack surface details. Adversary Ranking above identifies WHO; this section describes WHERE to investigate. Do NOT repeat the same risk in both places.]
+[This is the SINGLE authoritative location for attack surface details. Adversary Ranking above identifies WHO; this section describes WHERE the concrete mechanisms live. Do NOT repeat the same risk in both places.]
 
 [Sorted by priority score (protocol-type relevance + git hotspot + fix history + late changes + dangerous area churn). NOT alphabetical.]
-[These are **investigation pointers**, not exploit writeups. The auditor decides whether the concern is real, what the severity is, and how to exploit it. Your job is to name the area worth looking at and give enough context for the auditor to know where to start reading.]
+[These are **mechanism-first audit leads**, not full exploit writeups. Your job is to state the concrete state, value, accounting, pricing, or trust-boundary relationship that deserves exploit reconstruction. Avoid passive prompts; every bullet must be falsifiable from code and live-state checks.]
 [No RISK labels (HIGH/MEDIUM/LOW). No mitigation analysis. No git evidence per surface.]
+[Priority override: if a public or unresolved path can destroy / move inventory directly from an LP/pair/vault/reserve-holding address and then `sync()` / refresh reserves, list that surface first unless a stronger public cash-out path is already confirmed.]
+[Composite override: if weaker facts compose through a shared id, status, role, approval, asset, reserve bucket, dependency, or time boundary, write the combined mechanism as one surface instead of burying the facts separately.]
 
-- **[Surface name]** &nbsp;&#91;[X-N](invariants.md#x-n), [I-N](invariants.md#i-n)&#93; — [one tight sentence: code ref + the concern (what's unusual, fragile, or worth double-checking) + what an auditor should trace to confirm or dismiss it. Aim for 1 line, max 2.]
+- **[Surface name]** &nbsp;&#91;[X-N](invariants.md#x-n), [I-N](invariants.md#i-n)&#93; — [one tight sentence: code ref + the concrete mechanism/asymmetry/trust boundary + the state or value relationship to falsify. Aim for 1 line, max 2.]
 
 [Repeat for each surface, **separating bullets with a blank line** for readability. **Hard cap: 2 lines per surface.** Do not write paragraphs. Do not restate what the file:line already shows.]
 
 [**INVARIANT CROSS-LINK RULE**: If the surface's cited code location falls within the derivation window of any guard/invariant in `invariants.md` (the `Location` or `Derivation` field of G-N / I-N / X-N / E-N blocks), append the matching IDs as bracketed markdown links immediately after the surface title. Use lowercase slugs (`invariants.md#x-4`, not `#X-4`) since VS Code and GitHub normalize heading IDs to lowercase. Example: `**`withdrawFromInvestment` unchecked subtraction** &nbsp;&#91;[X-4](invariants.md#x-4)&#93; — ...`. Surfaces that are purely access-control or upgrade-ability concerns (no state-invariant touched) may be left unlinked — that is a healthy signal, not a gap.]
 
-[**DO-NOT-EXPLOIT RULE (critical):** Attack surfaces must describe the *concern area*, not the specific exploit. The auditor's value is building the attack path; yours is finding the area fast. If your bullet contains phrases like "→ attacker drains X", "→ user trapped", "→ inflated share", "reverts with Y trapping Z", "double-counts W", "leads to understated N" — cut them. Replace with "Worth checking...", "Worth tracing...", "Worth confirming...". Name the asymmetry, the divergence, the unusual pattern, the cross-path bookkeeping — then stop. Let the auditor finish the sentence.]
+[**DO-NOT-EXPLOIT RULE (critical):** Attack surfaces must describe the mechanism, not the full exploit conclusion. If your bullet contains phrases like "→ attacker drains X", "→ user trapped", "→ inflated share", "reverts with Y trapping Z", "double-counts W", "leads to understated N" — cut the final impact claim, not the mechanism. Never replace concrete mechanism language with hedges like "Worth checking...", "Worth tracing...", or "Worth confirming...". State the asymmetry, divergence, unusual pattern, cross-path bookkeeping, or trust boundary directly.]
 
 [Example of the pattern to follow:]
 
-[✅ `- **Epoch-end bookkeeping has two removal paths** — _addToEpochEndLocked:102 and _subtractFromEpochEndLocked:117-138 manage the globalEpochEnds arrays vs. the totalLockedAtEpochEnd mapping; _checkpointExpiredLocksCumulative:140 walks only the arrays. Worth checking that array membership stays in sync with mapping contents across all mutation paths.`]
+[✅ `- **Epoch-end bookkeeping has two removal paths** — _addToEpochEndLocked:102 and _subtractFromEpochEndLocked:117-138 manage the globalEpochEnds arrays vs. the totalLockedAtEpochEnd mapping; _checkpointExpiredLocksCumulative:140 walks only the arrays, so array↔mapping membership must stay synchronized across all mutation paths.`]
 
 [❌ Not: `- **globalEpochEnds desynced from totalLockedAtEpochEnd** — _subtractFromEpochEndLocked:117-138 pops the array unconditionally; expired mass at shared epochs never lands in accExpiredLocks → understated decay → inflated global bias.` (This spells out the exploit chain — "never lands in", "understated", "inflated" — leaving the auditor nothing to discover.)]
 
-[FRAMING RULE: Attack surfaces should be named after the root threat area, not individual symptoms or specific exploits. E.g., "SERVICE_ROLE compromise" is a surface — missing pausability on completeSwap is a detail that sits inside it. "Admin operational powers without timelock" is a surface — individual setters are evidence within the description. "Reward accounting crosses user/global symmetry" is a surface — specific numerator/denominator manipulations belong to the auditor. Frame surfaces as the actor/capability/pattern that deserves scrutiny, list the relevant functions inside the description, and stop before naming the exploit.]
+[FRAMING RULE: Attack surfaces should be named after the root threat area, not individual symptoms or final impact labels. E.g., "SERVICE_ROLE compromise" is a surface — missing pausability on completeSwap is a detail that sits inside it. "Admin operational powers without timelock" is a surface — individual setters are evidence within the description. "Reward accounting crosses user/global symmetry" is a surface — numerator/denominator divergence should be named concretely without asserting the final drain. Frame surfaces as the actor/capability/pattern that deserves exploit reconstruction.]
+[COMPOSITION RULE: When a surface depends on a second contract, helper, offchain actor, or later state transition, name that connector directly.]
 
 ### Upgrade Architecture Concerns
 
@@ -185,7 +188,7 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 - [Token type]: assumes [assumption not validated in code] — impact if violated: [consequence]
 
 **Shared State Exposure** *(if applicable)*:
-- [Which shared resources (pools, oracles), what other protocols share them, whether this protocol's actions could affect others]
+- [Which shared resources (pools, oracles), what other protocols share them, and which protocol actions mutate or consume that shared state]
 
 [Do NOT add an "Integration Summary" table — the Dependency Risk Map blockquotes above already cover every external dependency. A summary table would duplicate them.]
 
@@ -367,7 +370,7 @@ Example bad line (too wordy): `**Single-developer dominance**: 0xKaizendev autho
 1. [Verifiable structural fact — e.g., "15K nSLOC across N subsystems", "N upgradeable contracts", "2 developers wrote N% of code"]
 2. [...]
 3. [...]
-[3-5 items. ONLY measurable, verifiable facts from Sections 1-6. No security claims, no speculation about what "could" happen, no bug hypotheses, no attack scenarios. The verdict describes the codebase's structural posture (tests, docs, access control, complexity) — NOT its security. The auditor forms their own security conclusions.]
+[3-5 items. ONLY measurable, verifiable facts from Sections 1-6. No bug hypotheses or exploit scenarios. The verdict describes structural posture (tests, docs, access control, complexity); attack-surface mechanisms belong in Section 2.]
 ```
 # Entry Point Map Template
 
@@ -556,7 +559,7 @@ On-chain: **Yes/No**
 
 **Caller side** — `Caller.sol:LN` — [how the value is used]
 
-**Callee side** — `Callee.sol:LN` — [write sites that could break the assumption]
+**Callee side** — `Callee.sol:LN` — [write sites that mutate the assumed value]
 
 **If violated** — [consequence]
 
@@ -714,4 +717,3 @@ Then `Read` the PNG. If no renderer is available, skip the validation loop.
 ```bash
 rm -f x-ray/architecture.json x-ray/git-security-analysis.json /tmp/architecture-preview.png
 ```
-

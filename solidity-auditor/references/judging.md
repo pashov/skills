@@ -2,12 +2,127 @@
 
 Every finding passes four sequential gates. Fail any gate → **rejected** or **demoted** to lead. Later gates are not evaluated for failed findings.
 
+## Mandatory Pre-Check
+
+Before Gate 1, every candidate issue must be labeled as one of:
+
+- **Public Exploitable** — unprivileged actor can trigger it
+- **Privileged / Centralization** — only owner / admin / oracle / approved role can trigger it
+- **Code-Level / Config-Dependent** — source bug exists but live exploitability depends on config or unresolved external state
+
+Anything not first labeled **Public Exploitable** must not be described as attacker-profitable.
+
+For any issue that may be economic or profitable, fill this mini-table before gating:
+
+- `value source`
+- `trigger function`
+- `permission required`
+- `recipient of value`
+- `why attacker gets paid`
+- `payer / performer obligation` (if profit comes from retained inventory, debt escape, or false finality)
+
+If any row is missing or unclear, profitability is **not confirmed**.
+
+If the user supplied a transaction hash, explorer link, or RCA that appears to be a real exploit of the same target, add two more mandatory pre-check rows:
+
+- `corroborating tx/hash/link`
+- `source path matched by tx`
+
+If the tx matches the same source-level bug, the issue cannot be left at `Live: Unknown`.
+
+Before Gate 1, also answer:
+
+- `did I proactively validate live exploitability myself`
+- `if not, what exact blocker prevented that validation`
+
+If there is no real blocker, the audit is incomplete.
+
+Before Gate 1, discovery must also answer:
+
+- what assumption is being inverted
+- what non-standard path is being tested
+- whether the path uses helper / fallback / receiver / registry / subscriber / unusual ordering instead of the intended wrapper flow
+- whether every external dependency on the value path was actually analyzed, rather than being left as an unresolved “external contract” note
+- whether live-state validation was proactively performed for each high-signal public candidate, even without a user-supplied tx
+- whether live proxy addresses and implementation contracts were resolved when the user supplied them or when they were discoverable from deployment context
+- whether the code relies on `tx.origin`, `msg.sender == tx.origin`, `code.length == 0`, `isContract`, or similar EOA-only assumptions that should be treated as weak because delegated-EOA / account-abstraction behavior (including EIP-7702-style models) can violate the intended trust model
+- whether a contract uses one security-critical path for `transfer()` but leaves `transferFrom()` or `_transfer()` inherited, allowing router / allowance / permit flows to bypass the advertised policy layer
+- whether constructor-time callers can evade `extcodesize` / `code.length` / `isContract` checks and thereby reach a path that would block an already-deployed contract
+- whether any trusted-forwarder / relay / `execute` path can make funding, allowance ownership, burn source, callback user, accounting credit, refund recipient, and payout recipient diverge because the code mixes `msg.sender` and `_msgSender()`
+- whether a forwarder-aware contract composes with a non-forwarder-aware token/helper in a way that lets a fresh signer inherit stale reward or fee math using assets supplied by the forwarder
+- whether any value-out function (`withdraw`, `unstake`, `redeem`, `claim`, `removeLiquidity`, `refund`, `rescue`, native send, token transfer`) makes an external interaction before invalidating the record or entitlement that authorizes the exit
+- whether custody for the withdrawn asset is pooled at contract level, so repeated use of one stale record can spend shared inventory instead of isolated user balances
+- whether the path depends on crossing a threshold such as `minDispatch`, `swapBack`, `rebalance`, `burnPool`, `liquidate`, `harvest`, or any fee accumulator
+- whether a large-capital or flashloan actor can cross that threshold in one transaction
+- whether live reserves, balances, and taxes make the path economically meaningful rather than merely reachable
+- whether the protocol is a fork / close derivative of a known design and whether known parent-protocol attack classes were checked
+- whether an empty or near-empty market / pool / vault / share system could be bootstrapped into a profitable mispricing state
+- whether a Compound/Venus-style market lets a pre-existing share holder donate underlying directly to the market, keep the same share count, and still gain borrow power through a higher exchange rate
+- whether any lending market, ERC4626 vault, wrapper, receipt-token system, or collateral vault can have its exchange rate / NAV / collateral value increased by passive underlying donations that bypass the formal deposit or mint path
+- whether supply caps, deposit caps, or mint accounting are enforced only on `deposit`, `mint`, or `supply`, while raw underlying transfers still increase priced assets
+- whether raw `balanceOf(address(this))`, `getCash`, `totalAssets`, or equivalent passive balance reads are used in exchange-rate or collateral calculations without excluding unsolicited donations
+- whether unchanged share count plus increased raw backing can produce new borrow power, redeemable value, or liquidation value
+- whether an empty or near-empty reserve could amplify `liquidityIndex`, `variableBorrowIndex`, normalized income, or any other accumulator used later in scaled-balance accounting
+- whether public flashloan premiums, fee updates, or reserve-update paths can be looped repeatedly against a dust denominator
+- whether the protocol separates priced reserve, locked reserve, treasury reserve, raw balance, or other reserve buckets, and whether a public path can reclassify one bucket into another
+- whether any public sync/reconcile/update function can transiently make pricing or payout logic read from the wrong reserve bucket
+- whether any function that looks role-gated or helper-only is in fact reachable from a public upstream trigger such as `claim`, `distribute`, `process`, `harvest`, `rebalance`, router flow, or keeperless maintenance entrypoint
+- whether a deferred `pendingBurn`, fee bucket, reward bucket, burn debt, or similar queued mutation can be realized by a separate public helper / mining / distributor / maintenance entrypoint
+- whether one user-controlled action can write a global queued state and a later unrelated user-controlled action can consume that same state against shared reserves, balances, or accounting buckets
+- whether any external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, or selector-only low-level call remains unresolved even though it sits on a deposit / withdraw / mint / burn / claim / liquidation / settlement path
+- whether the same mutable price source is used to create a claim in one arithmetic direction and redeem it later in the opposite direction, such as `deposit/mint: amount * price` and `withdraw/redeem: claim / later_price`, or the inverse
+- whether any supplied tx hash, block number, trace, or RCA was used only as corroboration for a source-derived exploit path rather than as a substitute for source analysis
+- whether you proactively searched for corroborating live evidence when the candidate already looked immediately live from source plus reserves/config
+- whether a supplied exploit tx was fully reconciled against the source path before finalizing `Live on this deployment`, confidence, and severity
+- whether the tx exposed extra exploit legs not obvious from a superficial source read, such as day-boundary branches, threshold crossing, queued-state realization, fee-processing side effects, or reserve updates inside the same path
+- whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
+- whether an apparent non-profit bug becomes profitable through role collapse, false finality, retained inventory, escaped debt, or a downstream component that trusts terminal state without reconciling actual asset movement
+- for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
+  - inventory source
+  - queue creation / state poisoning
+  - public/helper realization
+  - `sync()` / reserve refresh
+  - final extraction leg
+- whether a standard-path refutation is being used while router-held, pair-to-router, liquidity-removal, or helper-held inventory sources remain unchecked
+- whether Morpho / MetaMorpho / lending-vault specific risk classes were checked: allocator/curator routing, downstream empty markets, oracle/collateral weakness, cap misconfiguration, withdrawal-liquidity starvation, and vault share bootstrap
+- whether a deposit / fee / `netValue` / principal contribution is being counted both as distributable reward and as fully withdrawable principal
+- whether reward payout reduces the same liability bucket from which the reward was derived, or only spends cash while liabilities remain overstated
+- whether two attacker-controlled accounts can cycle deposits, reward accrual, withdrawals, and principal exits to realize the accounting mismatch
+- whether insolvency or low live balance turns an otherwise circular reward model into an immediate public drain
+- whether every value-moving path preserves state-delta equality between:
+  - user mint/burn/borrow/repay amount
+  - global supply / debt / shares / assets mutation
+  - transferred underlying amount
+- whether any clamp, sentinel branch, balance cap, or rounding adjustment is applied only after global state has already been mutated
+- whether dust-position variants (`dust mint -> large redeem`, `dust collateral -> large borrow`, `redeemUnderlying(getCash())`, `type(uint256).max`) were checked
+- for Morpho / MetaMorpho style systems, whether each specific issue family was explicitly considered and either validated or disproven:
+  - empty / near-empty downstream market attack
+  - bad curation / cap attack
+  - oracle / collateral misconfiguration attack
+  - withdrawal-liquidity starvation
+  - ERC4626 / donation / first-depositor share inflation
+  - fork-with-minimal-diff inherited issue class
+- whether discovery was completed across the full critical surface rather than stopping at the first major issue
+- whether every critical value-moving family was explicitly marked complete, blocked, irrelevant, or rejected
+- whether attacker-chosen aliasing cases were checked:
+  - same address on both sides
+  - same asset on both sides
+  - different local storage references resolving to the same slot
+  - same id / same record / same bucket / same role value on both sides
+  - attacker-controlled equality conditions that collapse two logically distinct roles, accounts, assets, ids, records, or buckets into one storage target
+
+Do not reject an issue just because the standard path looks safe if the unusual path has not been checked.
+
 ## Gate 1 — Refutation
 
 Construct the strongest argument that the finding is wrong. Find the guard, check, or constraint that kills the attack — quote the exact line and trace how it blocks the claimed step.
 
 - Concrete refutation (specific guard blocks exact claimed step) → **REJECTED** (or **DEMOTE** if code smell remains)
 - Speculative refutation ("probably wouldn't happen") → **clears**, continue
+- A `tx.origin` / EOA / wallet-only check does **not** refute a finding if the same state change is reachable through `receive()`, `fallback()`, deposit, claim, helper, or any other externally callable path
+- A `msg.sender == tx.origin`, `code.length == 0`, or `isContract == false` check is a **flagged anti-pattern**, not a strong refutation, because delegated EOAs / account-abstraction behavior (including EIP-7702-style models) weakens the intended “EOA-only” guarantee
+- A safe intended UX flow does **not** refute a finding if an uglier legal sequence can still reach the same value movement
+- A `transfer()`-only guard does **not** refute a finding if router / allowance flow uses inherited `transferFrom()` or `_transfer()`
 
 ## Gate 2 — Reachability
 
@@ -15,15 +130,272 @@ Prove the vulnerable state exists in a live deployment.
 
 - Structurally impossible (enforced invariant prevents it) → **REJECTED**
 - Requires privileged actions outside normal operation → **DEMOTE**
+- Cross-contract helper / hook / library logic that the target contract actually calls is the same exploit surface, not an optional dependency review
+- Cross-contract `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `router`, `distributor`, and helper contracts actually called on the value path are the same exploit surface, not an optional dependency review
+- If execution price, reserve updates, or invariant enforcement are delegated, those delegated files are the critical path even when the named wrapper looks safe in isolation
+- If a critical external dependency could not be analyzed because source is missing or tooling failed, do not silently clear the path; keep the audit explicitly incomplete on that family
+- If the user supplied live addresses or deployment context that makes the dependency fetchable, failure to fetch the implementation/source is a tooling gap to report explicitly, not a reason to stop at the wrapper
+- If optional corroborating material matches the cross-contract source path and no concrete guard refutes it, do not reject or demote solely because the bug spans multiple contracts
+- If a supplied exploit tx matches the same root cause, this gate is automatically cleared for live reachability unless the tx is proven unrelated
+- If the exploit depends on configurable parameters or reserve ratios, test reachable defaults, allowed config bounds, and normal reserve skews before rejecting
+- If the live deployment address is known or discoverable, and the issue depends on reserves, balances, fee tiers, caps, roles, day boundaries, snapshots, or thresholds, you must check them before finalizing
+- If the system is a fork of a known protocol, do not reject inherited issue classes until the source diff proves the critical invariant changed
+- For live audits, verify the actual onchain config values before treating a code bug as active
+- If live role holders are EOAs / multisigs with no public takeover path, keep the issue in `Privileged / Centralization`, not `Public Exploitable`
 - Achievable through normal usage or common token behaviors → **clears**, continue
+- Payable `receive()` / `fallback()` entrypoints, flash loans, router callbacks, and helper-contract claims are normal reachable behavior when the code exposes them
+- Unusual but legal call ordering, first-write-wins poisoning, direct helper entry, and purpose-built exploit wallets are normal reachable behavior when public functions permit them
+- If these behaviors appear immediately live from source, reserve state, and config, you must attempt corroboration from explorer / trace / historical transactions even when the user did not supply a tx
+- Constructor-time helper contracts are normal reachable behavior when public functions rely on `isContract`, `extcodesize`, or `code.length == 0` assumptions
+- EOA-only assumptions are not enough to demote reachability when delegated-EOA or account-abstraction semantics could exercise the same public path
+- Empty-market / first-depositor / share-inflation / donation-boosted bootstrap states are normal reachable behavior if the protocol can launch or interact while depth is near zero
+- Direct underlying donation into a collateral market is normal reachable behavior if the market contract can receive the token and exchange-rate logic reads raw balance without minting offsetting shares
+- Reserve-index amplification on dust liquidity is normal reachable behavior if public actions can both shrink reserve liquidity and later update the index through flashloans, fees, or repayments
+- Transient reserve-bucket corruption is normal reachable behavior if a public sync/update path can be called immediately before a burn/sell/redeem step, even if final storage is restored later in the same transaction
+- Allocator / curator / cap / withdrawal-queue states are normal reachable behavior in Morpho/MetaMorpho-style vaults and must be checked before rejecting those issue classes
+- When a system is a close fork of a historically exploited lending/vault design, unchanged critical assumptions should be presumed inherited until the source diff proves otherwise
 
 ## Gate 3 — Trigger
 
 Prove an unprivileged actor executes the attack.
 
 - Only trusted roles can trigger → **DEMOTE**
-- Costs exceed extraction → **REJECTED**
+- If the value is redirected to protocol treasury / feeRecipient / owner rather than the caller, this is **not** outsider profit unless attacker control or collusion is proven
+- Retained inventory, escaped repayment, or avoided delivery can be attacker profit if the protocol bug falsely finalizes the obligation
+- Costs exceed extraction → **REJECTED** only after evaluating realistic repeated execution and compounding, not just a single iteration
+- A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
+- A single loss-making sample at one parameter point is not enough to reject a pair-burn / reserve-destruction exploit with a complete source-level trace
+- A single harmless sample does **not** refute approximation bias, midpoint/average pricing, or micro-edge compounding on a nonlinear curve; repeated iterations and callback-loop execution must be checked
+- If a modeled path is profitable under live state and uses only public functions plus market liquidity, treat it as confirmed triggerable even without a historical exploit tx
 - Unprivileged actor triggers profitably → **clears**, continue
+- If the protocol's intended restrictions live only in `transfer()`, treat standard router `transferFrom()` flow as the default public trigger path unless the code explicitly overrides or re-routes it
+- If a purpose-built exploit contract can trigger the path with public entrypoints and borrowed capital, treat it as unprivileged even when the protocol expected EOAs or wallets
+- If the path only activates after a threshold is crossed, do not reject until you test whether realistic capital or a flash loan can cross it
+- If optional corroborating material matches the call chain plus arithmetic in source, that is supporting trigger evidence even when some dependencies were fetched from explorers rather than the local repo
+- If a supplied exploit tx shows the same public trigger and value-out path, do not leave trigger status, live status, or profitability as `Unknown`
+- If a helper/router/vault/distributor performs the real swap or payout, the helper's live balances, approvals, and recipients are part of the same trigger analysis
+- If a helper/mining/distributor contract is the public trigger that realizes a deferred reserve mutation on the token or pair, treat that helper as part of the same exploit path rather than as a separate privileged dependency
+- If source-backed code proves queue creation, pair-side realization, and reserve refresh, do not demote solely because the upstream helper contract is decompiled or unverified; instead lower confidence only to the extent that the public trigger remains uncertain
+- A circular reward model is not “just design” if a public attacker can use temporary capital or multiple addresses to withdraw more cash than the protocol can safely back
+- If the initial effect is griefing, you must still test common profit-conversion pivots before rejecting profitability:
+  - attacker-controlled recipient / sink / referrer / helper
+  - payer / maker / borrower / distributor using a second address to trigger false completion
+  - front-run / back-run
+  - repeated micro-extraction
+  - state poisoning followed by later extraction
+  - terminal state that blocks recovery while the attacker keeps inventory or avoids liability
+
+## Gate 3.5 — Reserve Reality Check
+
+For AMM-, vault-, liquidation-, or reserve-facing issues, ask:
+
+- What are the live reserves and balances?
+- How large is the forced move relative to those reserves?
+- What are the round-trip costs from swap fees, token taxes, slippage, and price impact?
+- Was attacker-controlled size space explored beyond one default sample?
+- Does the edge only become positive after repeated iterations rather than a single round trip?
+- Is the pricing function exact, or is it a midpoint / average / interpolated / cached approximation of a nonlinear curve?
+- Do reserve updates use gross input while output pricing uses net-after-fee input, or any other mismatched effective amount?
+- Is the path dead, dormant, or immediately live?
+- Is the market / pool / vault currently empty or near-empty, and does that change exchange-rate, collateral, liquidation, or share-pricing assumptions?
+- If the user supplied a live exploit tx on the same market / pool / vault, do the tx reserves, quoted outputs, and realized outputs reconcile with the modeled exploit arithmetic?
+
+If reserve depth, threshold reachability, and realistic round-trip costs were not checked, attacker profitability is **not confirmed**.
+
+If those values were checked and a supplied exploit tx matches the modeled source path, attacker profitability is **confirmed** for that live configuration.
+
+If those values were checked and the modeled path is already profitable under live state using only public actions, attacker profitability is also **confirmed** even with no historical exploit tx.
+
+## Gate 3.51 — Price-Path Asymmetry Check
+
+For pricing-, share-, receipt-, or claim-based systems, ask:
+
+- Does deposit/mint/credit logic read a price path and transform user input by multiplying or dividing through that price?
+- Does withdraw/redeem/burn/settlement logic later read the same price path again and apply the inverse arithmetic direction to the stored claim, share, or receipt?
+- Can that price path move within the same transaction, same multicall, or same short exploit loop through AMM state, oracle update cadence, helper calls, or flash-loanable liquidity?
+- If the user supplied corroborating trace data or an RCA, do the code-level formulas reproduce the supplied arithmetic at the cited prices and amounts?
+
+If the answers show the same mutable price source is used asymmetrically across mint and redeem, treat this as a first-class exploit candidate and finish the extraction analysis before clearing the system.
+
+## Gate 3.55 — Reserve Index Check
+
+For Aave-style or scaled-balance lending markets, ask:
+
+- Can a public actor first reduce reserve liquidity to dust or near dust?
+- Does any public flashloan, fee, repay, or reserve-update path increase `liquidityIndex`, `variableBorrowIndex`, normalized income, or a related accumulator using that dust liquidity as denominator?
+- Can repeated self-flashloans or fee-generating loops compound the index materially?
+- After index manipulation, do scaled mint/burn/balance conversions round in a way that lets tiny deposits or balances support larger withdrawals, collateral value, or borrow power?
+- Does the exploit require only public lending-core paths, even if wrappers/periphery look unrelated?
+
+If these questions were not checked, attacker profitability for Aave-style reserve systems is **not confirmed**.
+
+## Gate 3.56 — Compound / Venus Donation Check
+
+For Compound-style or exchange-rate-backed lending markets, ask:
+
+- Can a user with a pre-existing cToken/vToken balance donate underlying directly to the market without minting new shares?
+- Does `exchangeRateStored`, `exchangeRateStoredInternal`, `getCash`, or equivalent reserve-backed accounting treat that donation as additional backing for all existing shares?
+- Do liquidity / borrow checks then multiply the unchanged share balance by the inflated exchange rate, oracle price, and collateral factor to create new borrow capacity?
+- Can the attacker loop `borrow -> swap -> donate underlying -> borrow again` until shortfall or bad debt appears?
+- Does the exploit work only in an empty market, or also in a non-empty market with a sufficiently large direct donation?
+
+If these questions were not checked, attacker profitability for Compound/Venus-style collateral markets is **not confirmed**.
+
+## Gate 3.56A — Donation / Exchange-Rate Inflation Check
+
+For lending markets, ERC4626 vaults, wrappers, or share-priced collateral systems, ask:
+
+- Can an attacker transfer underlying directly to the market / vault / wrapper contract without calling the formal `deposit`, `mint`, or `supply` path?
+- Does that direct transfer increase any of:
+  - `cash`
+  - `totalAssets`
+  - exchange rate
+  - share price
+  - collateral value
+  - redeemable value
+- Does the direct transfer avoid:
+  - supply-cap / deposit-cap enforcement
+  - mint accounting
+  - share issuance
+  - debt/accounting normalization
+- Does the system price shares, collateral, or borrow power from raw passive balances such as `IERC20(asset).balanceOf(address(this))`, `getCash`, or equivalent?
+- Can the attacker then use the inflated value to:
+  - borrow more assets
+  - redeem excess assets
+  - distort liquidation math
+  - bypass collateral constraints
+  - extract protocol value
+- Is realizable market liquidity materially lower than the inflated onchain collateral value?
+
+If the answers to the first four bullets are yes, this is a donation-inflation candidate.
+If the borrow / redeem / liquidation distortion path is also yes, it must be reported as a finding, not a lead.
+Do not dismiss this as “supported behavior” if passive donations can increase collateral/share value without minting offsetting shares.
+
+## Gate 3.57 — Reserve Bucket Check
+
+For reserve-priced mint/burn/swap/treasury systems, ask:
+
+- Does the protocol distinguish between priced reserve, locked reserve, treasury reserve, claimable reserve, and raw balance?
+- Can any public `sync`, `reconcile`, `refresh`, `skim`, `settle`, or selector-level function rewrite priced reserve from raw balance without excluding locked funds?
+- Can a user call that function and then immediately invoke burn/sell/redeem/withdraw logic before the protocol restores canonical accounting?
+- Is the exploit profitable even if the final end-of-tx state looks consistent again?
+
+If these questions were not checked, attacker profitability for bucketed-reserve systems is **not confirmed**.
+
+## Gate 3.58 — LP Reserve Destruction Check
+
+For token / AMM systems that can touch pair balances, ask:
+
+- Can any public sell hook, transfer hook, pending-burn bucket, fee bucket, or maintenance path burn or otherwise destroy tokens directly from the LP/pair address?
+- Is that pair-side destruction fed by public user actions rather than only privileged admin calls?
+- Does the contract call `sync()` after pair-side destruction, making the reserve skew immediately tradable?
+- Can an attacker loop `buy -> trigger sell/transfer hook -> accumulate pair-burn debt -> burn pair reserve -> sync -> extract opposite reserve`?
+- Can the attacker first source inventory through router-held output, liquidity-removal output, or helper-mediated custody before executing `... -> burn pair reserve -> sync -> extract opposite reserve`?
+- If direct buys are blocked, can pair-originating tokens still legally reach attacker inventory through router custody, pair-to-router transfers, liquidity-removal branches, or helper-mediated release?
+- If the pair-side mutation is queued in one transaction and realized in a later public helper / distributor / mining call, is that later call permissionless and therefore part of the same public exploit path?
+- Can a public caller force a helper / mining / rewards / maintenance contract to execute the pair-burn path even if the final burn function itself is role-gated?
+- Can any sentinel recipient/sender such as `address(0)`, dead address, pair, router, staking contract, treasury, or distributor bypass a guarded buy/sell/fee branch through an early return or special-case path?
+- Does the protocol consume stale global pending state (fee bucket, burn debt, cached reserve mutation) before the current user's action is accounted, letting the attacker choose the current action to exploit the already-mutated reserves?
+- Does one public call create a global queued state while a later unrelated public call realizes it against the pair / vault / market, especially when the realizing caller can be a fresh constructor-time helper?
+- After realistic flashloan size, taxes, fees, and slippage, does collapsing the token-side reserve leave the opposite reserve profitably drainable?
+- Was attacker-controlled sizing explored beyond a single fixed-size round trip, including buy size, sell size, threshold-crossing size, and flashloan bankroll?
+- If the first tested round trip is loss-making, does the source still allow a different sequence such as `large buy -> pair-side burn to dust -> sync -> dump`, or `queue in one call -> realize in another`, that must be checked before demotion?
+- If the user supplied a tx hash, trace, or incident context for this same pair/reserve path, was the source arithmetic reconciled against that live evidence before clearing or demoting the issue?
+- If queue creation, public/helper realization, pair-side destruction, `sync()`, and monetization are all source-reachable, rank the issue as a primary public exploit rather than splitting it into separate medium-severity component findings
+
+If these questions were not checked, attacker profitability for pair-burn / LP-reserve-destruction systems is **not confirmed**.
+
+## Gate 3.59 — Sentinel Address / Sequence Reconstruction Check
+
+For hook-driven tokens, routers, vaults, and reserve-mutating systems, ask:
+
+- Do any branches special-case `address(0)`, dead address, pair, router, staking, treasury, distributor, escrow, or helper addresses?
+- Can one of those sentinel addresses bypass a restriction only because the code returns early before the guarded path or accounting hook runs?
+- Can a router or pair legally force assets to that sentinel address during a public swap/mint/burn path?
+- Is there at least one concrete exploit sequence that goes beyond the bug family and specifies the actual order, including seed action, state mutation, bypass branch, dust trigger if needed, and final extraction leg?
+- Does the path rely on consuming stale global state before the current action, rather than on the current action alone?
+
+If these questions were not checked, attacker profitability for sentinel-address / exact-sequence exploits is **not confirmed**.
+
+## Gate 3.60 — Forwarder Identity Split Check
+
+For ERC2771 / relay / trusted-forwarder systems, ask:
+
+- Does any value-moving path use raw `msg.sender` for funding, allowance ownership, burn source, callback source, or refund destination while using `_msgSender()` for accounting credit, authorization, or payout?
+- Can a forwarder-aware contract interact with a non-forwarder-aware token or helper so that the forwarder supplies assets or approvals while the appended signer receives credit, rewards, fees, or claims?
+- After the forwarder-mediated action, do lifecycle variables such as `lastActiveCycle`, `lastFeeUpdateCycle`, `rewardDebt`, `nonce`, `claimed`, or similar remain stale for the credited signer?
+- Can a fresh or stale signer replay old reward/fee/cycle math using assets burned, approved, or funded by the forwarder?
+
+If these questions were not checked, attacker profitability for forwarder-identity-split exploits is **not confirmed**.
+
+## Gate 3.61 — Value-Out Reentrancy Check
+
+For withdrawal / unstake / redeem / claim / liquidity-removal systems, ask:
+
+- Does the function perform any external interaction before clearing or invalidating the user record that authorizes the withdrawal?
+- During that interaction window, do `hasStaked`, `hasPosition`, `isActive`, balance/entitlement checks, or similar still pass on the same record?
+- Can a fallback or hook reenter the same function or a sibling value-out function before the record is cleared?
+- If pooled assets are used, does the repeated call spend shared contract inventory rather than isolated user custody?
+
+If these questions were not checked, attacker profitability for value-out reentrancy exploits is **not confirmed**.
+
+## Gate 3.62 — Critical Surface Completion Check
+
+Before final ranking, ask:
+
+- Was the entire critical value-moving surface reviewed, not just the first severe-looking bug?
+- Were `withdraw`, `unstake`, `redeem`, `claim`, `borrow`, `repay`, `liquidate`, `seize`, `mint`, `burn`, `deposit`, `removeLiquidity`, `sync`, `settle`, `execute`, `rescue`, and `refund` each marked complete, blocked, irrelevant, or rejected?
+- Were attacker-controlled aliasing cases explicitly checked across the relevant category, not just one protocol type?
+- Did the audit continue after finding one major issue, rather than anchoring on that first issue and leaving stronger direct exploit paths unreviewed?
+- Were fragmented component findings merged into a single primary exploit when the end-to-end chain was source-reconstructable?
+
+If these questions were not checked, the audit is incomplete and any “final” conclusion must say so explicitly.
+
+## Gate 3.63 — Dependency Closure Check
+
+For any protocol, wrapper, decompiled target, or externally coupled contract, ask:
+
+- Were all value-moving external dependencies actually analyzed?
+- Does any unresolved external `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `router`, `distributor`, `helper`, or selector-only low-level target still control pricing, balance accounting, minting, burning, settlement, or payout?
+- Was that dependency fetched and reviewed, or explicitly marked blocked with a concrete reason?
+- If blocked, does the final conclusion state that coverage is incomplete for that critical path?
+
+If these questions were not checked, the audit is incomplete and any “final” conclusion must say so explicitly.
+
+## Gate 3.6 — Reward Solvency Check
+
+For reward-, staking-, dividend-, yield-, referral-, or principal-tracking systems, ask:
+
+- Is newly deposited or newly accrued value counted twice: once as distributable reward and again as fully withdrawable principal / share value?
+- Does `claim`, `withdraw`, `harvest`, `reinvest`, or equivalent reduce the same liability accounting that created the reward?
+- Can an attacker use two or more controlled addresses to seed principal, inflate pending rewards, withdraw reward from one side, and then exit principal from the other?
+- Does the exploit need real external yield, or can it be funded entirely by later deposits, temporary capital, or flash-loaned liquidity?
+- Does the protocol become immediately drainable once cash-on-hand is lower than reported contributed principal / assets / shares / liabilities?
+- Are public variables such as `totalContributed`, `accRewardPerShare`, `rewardDebt`, `claimedSoFar`, `shares`, `assets`, `principal`, or equivalent left overstated after cash leaves the contract?
+- Are deposit, rank, or qualification thresholds scaled to the token's actual decimals, or can a tiny deposit satisfy a whole-token requirement because the code compares against a raw literal?
+- Is a one-time reward / pool / rank latch checked but never flipped after the payout, allowing the same reward path to fire repeatedly?
+- Can a referrer or sponsor use many cheap helper accounts to repeatedly satisfy the same threshold and mint treasury-backed rewards?
+- Does the public claim path convert synthetic accounting balances into real treasury outflows without an independent reserve-backing check?
+
+If these questions were not checked, attacker profitability for reward/accounting systems is **not confirmed**.
+
+## Gate 3.7 — Value-Moving Invariant Check
+
+For mint/redeem/borrow/repay/liquidate/claim/withdraw/share-conversion systems, ask:
+
+- Does the global state delta equal the per-user state delta for the same economic action?
+- Is the transferred amount derived from the same effective quantity that is burned/minted/borrowed/repaid in storage?
+- Are clamps, caps, sentinel values, dust handling, or balance checks applied before both global and per-user mutations, rather than after one side has already changed?
+- Can a dust position trigger a large quoted transfer while only a tiny user balance is burned or locked?
+- Does any path reduce `totalSupply`, `totalBorrows`, `totalAssets`, `shares`, or similar global values by a larger amount than is actually removed from the attacker account?
+- After a full `claim`, `withdraw`, `redeem`, `unlock`, `cancel`, `collect`, or `settle`, is the primary source-of-truth record actually invalidated rather than only an auxiliary index/list/lookup helper?
+- Can the same id / record be used twice because the payout authorization still reads from an uncleared primary record?
+- Can attacker-chosen equality conditions make two supposedly different balance/storage references alias the same slot?
+- If so, do sequential writes net correctly, or does the later write overwrite the earlier one and mint / preserve value incorrectly?
+- For liquidation code, were `borrower == liquidator` and `assetBorrow == assetCollateral` checked explicitly rather than assumed to be nonsense or self-harm?
+- If liquidation reads borrower-collateral and liquidator-collateral through separate locals, can those locals alias the same `(account, asset)` slot and turn a net-zero seizure into minted collateral?
+
+If these questions were not checked, attacker profitability for value-moving accounting systems is **not confirmed**.
 
 ## Gate 4 — Impact
 
@@ -31,6 +403,7 @@ Prove material harm to an identifiable victim.
 
 - Self-harm only → **REJECTED**
 - Dust-level, no compounding → **DEMOTE**
+- Repeated micro-bias that compounds into measurable pool or vault loss is **not** dust
 - Material loss to identifiable victim → **CONFIRMED**
 
 ## Confidence
@@ -54,10 +427,54 @@ Before finalizing leads, promote where warranted:
 - **Cross-contract echo.** Same root cause confirmed as FINDING in one contract → promote in every contract where the identical pattern appears.
 - **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75.
 - **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, description only.
+- **Corroborated arithmetic match.** If optional supporting material matches the source-level call chain and arithmetic and no concrete refutation survives Gate 1, treat that as supporting evidence; do not require it, and do not leave a source-complete cross-contract exploit as an unresolved lead.
+- **Parameter-sensitive economics.** If the source trace is complete and the only open question is which reachable configuration or reserve regime turns it profitable, do not reject on one default sample. Demote to LEAD only after searching the reachable parameter space.
+- **Threshold-sensitive economics.** If the source trace is complete and the only open question is whether a whale/flashloan can wake a dormant thresholded path, do not reject until that threshold reachability is checked.
+- **Approximation-sensitive economics.** If the source trace shows midpoint bias, average-price execution, nonlinear approximation, or gross/net reserve mismatch, do not reject until repeated-iteration and callback/multicall compounding has been checked.
+- **Fork-sensitive economics.** If the code is a near-fork of a historically exploited design, do not reject the inherited issue class until the source diff proves the critical bootstrap or accounting assumption was actually changed.
+- **Reserve-index economics.** If the source trace shows dust-liquidity denominators feeding public index updates and later scaled-balance valuation, do not demote it to “empty-market smell” until repeated flashloan/fee compounding and post-index rounding have been checked.
+- **Donation-inflation economics.** If the source trace shows direct underlying donations can raise exchange rate or collateral value for an unchanged share balance, do not demote it to “design” or “non-empty market” until pre-existing-holder, recursive-borrow, and post-liquidation bad-debt variants have been checked.
+- **Transient reserve economics.** If the source trace shows a public sync/update path can temporarily reclassify locked or unsellable funds into the priced reserve, do not demote it to “eventual consistency” until a same-tx `sync -> burn/sell/redeem` extraction loop has been checked.
+- **Pair-burn economics.** If the source trace shows public user flow feeds a pending burn bucket or other path that can burn LP/pair inventory and then `sync()`, do not demote it to “tokenomics” until `buy -> hook -> pair-burn -> sync -> opposite-reserve extraction` has been checked.
+- **Pair-burn trigger-chain economics.** If the final pair-burn function looks privileged but a public caller may trigger it indirectly through rewards, mining, fee processing, harvesting, distribution, rebalancing, or router-maintenance flow, do not demote it until that upstream trigger chain is either proved blocked or completed end-to-end.
+- **Pair-burn sizing economics.** If the first simulated round trip is loss-making, do not demote the issue until attacker-controlled sizing has been searched for the regime where pair-side burn dominates remaining token reserves after the buy leg.
+- **Pair-burn corroboration.** If the user supplied a tx hash or live incident on the same path and the source trace is compatible, do not leave the issue as a lead without reconciling the trace arithmetic against source.
+- **Priority rule for reserve destruction.** If a complete or unresolved public pair-burn plus `sync()` exploit chain exists, do not let easier direct drains, stale-accounting bugs, or pure DoS findings outrank it unless they are strictly stronger public cash-out paths.
+- **Sentinel-bypass economics.** If the source trace shows an early return or special-case branch for `address(0)`, dead address, pair, router, staking, treasury, or distributor, do not demote it to “edge case” until buy/sell/claim bypass and exact exploit-sequence variants have been checked.
+- **Stale-global-state economics.** If the source trace shows stale pending state is consumed before the current user action is accounted, do not stop at the bug family; complete one exact exploit sequence showing how the attacker chooses amount/recipient/order to realize the skew.
+- **Forwarder-identity economics.** If the source trace shows mixed `msg.sender` / `_msgSender()` usage across funding, burn, callback, accounting, or payout, do not demote it to “meta-tx integration issue” until a forwarder-supplied / signer-credited exploit sequence has been checked.
+- **False-finality economics.** If terminal state can advance without reconciling actual asset movement, do not demote it to griefing until payer-caller collusion, retry blocking, and downstream finality consumers have been checked.
+- **Value-out reentrancy economics.** If the source trace shows a value-out function performing an external call or LP removal before invalidating the authorizing record, do not demote it to “missing nonReentrant” or “theoretical reentrancy” until pooled-custody and same-record repeat-withdraw variants have been checked.
+- **Reward-solvency economics.** If the source trace shows a deposit being booked both as reward source and withdrawable principal, do not demote it to “economic design” until a two-account / temporary-capital extraction attempt has been checked.
+- **Reward-threshold economics.** If the source trace shows a reward threshold using raw literals against decimal-scaled token amounts, or a one-time reward latch checked but never consumed, do not demote it to “logic bug” until helper-farmed reward amplification and treasury claim-out have been checked.
+- **State-delta economics.** If the source trace shows global mint/burn/supply/debt mutation using a different amount than the per-user mutation or final transfer, do not demote it as “standard fork logic” until dust-position, sentinel-value, and full-cash variants have been checked.
+- **One-time-claim economics.** If the source trace shows settlement clears only an owner index / helper list / enumerable set while the primary record still authorizes payout, do not demote it to “bookkeeping” until same-id repeat-claim / repeat-withdraw has been checked.
 
 ## Leads
 
 High-signal trails for manual investigation. No confidence score, no fix — title, code smells, and what remains unverified.
+
+Leads should be favored over rejection when:
+
+- the path is unusual but legal and has not been fully stress-tested
+- the bug is clearly real but monetization is incomplete
+- the standard flow is safe but helper / fallback / receiver / first-write / sequence variants remain open
+
+## Final Conclusion
+
+The report must end with an explicit attacker-profitability conclusion for a **non-owner / unprivileged attacker**:
+
+- **Yes**: at least one surviving finding proves a complete profitable path for an unprivileged actor.
+- **No**: no surviving finding proves attacker profit, even if the contract still contains honeypot logic, griefing, freezing, or owner-only abuse.
+- **Inconclusive**: the best remaining evidence is a lead or demoted finding with incomplete profitability proof.
+
+Also explicitly distinguish:
+
+- **code bug exists**
+- **live on this deployment**
+- **publicly exploitable**
+- **attacker profitable**
+- **privileged-only risk**
 
 ## Do Not Report
 
