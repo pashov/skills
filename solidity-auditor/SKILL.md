@@ -555,6 +555,7 @@ Read the bundle fully before producing findings.
 You must include at least one non-standard / unusual exploit attempt from the discovery checklist, even if it is later rejected.
 If the bundle contains any mint / redeem / borrow / repay / liquidate logic, you must explicitly test same-address and same-asset aliasing cases and report the outcome, even if no bug is found.
 For liquidation systems specifically, test `borrower == liquidator` and `assetBorrow == assetCollateral` as mandatory source-level cases before concluding the path is safe.
+Do not stop at isolated bugs. Try to compose weak signals across contracts, roles, status flags, time delays, offchain finality, and helper calls. For at least one candidate, model a malicious obligor or colluding two-address actor, then either complete the profit/obligation-evasion path or state the exact guard that blocks it.
 ```
 
 **Turn 4 — Deduplicate, validate & output.** Single-pass: deduplicate all agent results, gate-evaluate, and produce the final report in one turn. Do NOT print an intermediate dedup list — go straight to the report.
@@ -570,7 +571,12 @@ Before report formatting, perform a **Critical Surface Completion Review**:
 
 1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.
 
-   Check for **composite chains**: if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B). Most audits have 0–2.
+   Check for **composite chains** before any rejection:
+   - if finding A's output feeds into B's precondition AND combined impact is strictly worse than either alone, add "Chain: [A] + [B]" at confidence = min(A, B)
+   - if two LEADs share an id, asset, role, finality flag, accounting bucket, helper, oracle, allowance holder, or time boundary, attempt one combined exploit reconstruction before leaving both as separate leads
+   - if the combined chain turns a griefing/DoS symptom into inventory retention, debt escape, false settlement, bad liquidation, borrow-power creation, claim replay, or reserve reclassification, evaluate the combined chain as its own candidate
+   - if a malicious payer / distributor / maker / borrower / liquidator using two addresses makes the economics profitable, do not describe the issue as non-profitable outsider griefing without also recording that conditional profit model
+   Most audits have 0-2 confirmed composite chains, but every audit must perform the synthesis pass.
 
 2. **Gate evaluation.** Run each deduplicated finding through the four gates in `judging.md` (do not skip or reorder). Evaluate each finding exactly once — do not revisit after verdict.
 
@@ -596,6 +602,8 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - `permission required`
    - `recipient of value`
    - `why attacker gets paid`
+   - `who was supposed to pay / deliver / repay / settle`
+   - `whether profit is extracted funds or avoided obligation`
    If any field cannot be completed from source and live state, do not mark the issue as attacker-profitable.
 
    **Single-pass protocol:** evaluate every relevant code path ONCE in fixed order (constructor → setters → swap functions → mint → burn → liquidate). One-line verdict per path: `BLOCKS`, `ALLOWS`, `IRRELEVANT`, or `UNCERTAIN`. Commit after all paths — do not re-examine. `UNCERTAIN` = `ALLOWS`.
