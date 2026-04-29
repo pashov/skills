@@ -259,6 +259,11 @@
 - **D:** Shares redeemed at projected end-of-term rate rather than current realized rate. Early redeemers take more than proportional share — late redeemers find vault depleted.
 - **FP:** Redemption uses current realized rate (`totalAssets() / totalSupply()`). Withdrawal queue enforces proportional access. Early redemption penalty applied.
 
+**52. False Completion / Distribution Finality Without Asset Movement**
+
+- **D:** Public or weakly-gated function advances a distribution, settlement, refund, fill, repayment, or completion state using the requested `amount`, a rounded-down amount, or a counter increment, even when actual asset transfer is zero or partial. A malicious payer / distributor / maker can use a second address to call the buggy path, flip the deal to `Distributed` / `Settled` / `Completed`, and keep the inventory or avoid the obligation while recipients are blocked from recovery.
+- **FP:** Completion/finality is keyed to actual token/ETH delta, per-recipient transferred totals, or post-transfer balance reconciliation. Zero-transfer and partial-transfer cases cannot consume the full obligation or advance terminal status. Retries / recovery remain possible until full value movement is proven.
+
 **52A. Custom `transfer()` Policy Bypassed Through Inherited `transferFrom()`**
 
 - **D:** Token implements buy/sell/fee/anti-bot logic only in `transfer()` but leaves `transferFrom()` and `_transfer()` inherited. Standard router sells, LP adds, permit flows, and allowance-based helper paths use `transferFrom()` and therefore bypass the advertised restrictions.

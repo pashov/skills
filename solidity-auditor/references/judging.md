@@ -19,6 +19,8 @@ For any issue that may be economic or profitable, fill this mini-table before ga
 - `permission required`
 - `recipient of value`
 - `why attacker gets paid`
+- `who was economically supposed to pay / perform`
+- `does profit come from extracting protocol/user funds, or from avoiding an obligation while state still finalizes`
 
 If any row is missing or unclear, profitability is **not confirmed**.
 
@@ -75,6 +77,10 @@ Before Gate 1, discovery must also answer:
 - whether a supplied exploit tx was fully reconciled against the source path before finalizing `Live on this deployment`, confidence, and severity
 - whether the tx exposed extra exploit legs not obvious from a superficial source read, such as day-boundary branches, threshold crossing, queued-state realization, fee-processing side effects, or reserve updates inside the same path
 - whether the attacker can accumulate inventory indirectly through router-held output, LP-removal output, helper custody, or other non-standard paths even if direct buys are blocked
+- whether the apparent “non-profit” bug becomes profitable when the attacker controls multiple addresses that occupy different protocol roles, such as obligor + public caller, payer + recipient, maker + beneficiary, or borrower + liquidator
+- whether a state transition like `Distributed`, `Settled`, `Completed`, `Cancelled`, `Filled`, or `Claimed` can be reached without proving the intended token/ETH movement
+- whether such false finality lets the attacker retain inventory, escape a payment/delivery obligation, preserve collateral, avoid debt repayment, or unlock some later payout path
+- whether the protocol, counterparties, or downstream integrations will treat that false finality as authoritative and refuse further recovery
 - for any pair-burn / queued reserve mutation candidate, whether the full exploit chain was reconstructed end to end:
   - inventory source
   - queue creation / state poisoning
@@ -159,6 +165,7 @@ Prove an unprivileged actor executes the attack.
 
 - Only trusted roles can trigger → **DEMOTE**
 - If the value is redirected to protocol treasury / feeRecipient / owner rather than the caller, this is **not** outsider profit unless attacker control or collusion is proven
+- If the attacker profits by retaining assets they were supposed to distribute, settle, refund, repay, or deliver, that still counts as attacker profit when the protocol bug is what lets the obligation disappear or finalize falsely
 - Costs exceed extraction → **REJECTED** only after evaluating realistic repeated execution and compounding, not just a single iteration
 - A single loss-making sample at one parameter point is not enough to reject a pricing exploit with a complete source-level trace
 - A single loss-making sample at one parameter point is not enough to reject a pair-burn / reserve-destruction exploit with a complete source-level trace
@@ -176,9 +183,12 @@ Prove an unprivileged actor executes the attack.
 - A circular reward model is not “just design” if a public attacker can use temporary capital or multiple addresses to withdraw more cash than the protocol can safely back
 - If the initial effect is griefing, you must still test common profit-conversion pivots before rejecting profitability:
   - attacker-controlled recipient / sink / referrer / helper
+  - attacker-controlled obligor using a second address to trigger false completion
+  - colluding maker/payer/distributor plus public griefer account
   - front-run / back-run
   - repeated micro-extraction
   - state poisoning followed by later extraction
+  - false finality that blocks recovery while the attacker keeps inventory or avoids liability
 
 ## Gate 3.5 — Reserve Reality Check
 

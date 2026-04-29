@@ -278,6 +278,19 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - **Profit conversion attempts**:
        - if the initial issue looks like griefing, list ways it could become profit via front-run/back-run, self-referral, attacker-controlled sink, temporary role capture, flash loan, or purpose-built contract wallet
        - if value is redirected to protocol sinks, test whether attacker can first become or influence that sink
+       - explicitly test collusion / role-collapse variants where the same economic actor controls two or more addresses that play different protocol roles, such as payer + griefer, buyer + receiver, liquidator + beneficiary, distributor + recipient, or claimer + referrer
+       - explicitly test malicious-obligor variants where the attacker's profit comes from avoiding an owed payout, distribution, refund, settlement payment, collateral top-up, debt repayment, or delivery obligation while still flipping protocol state to `distributed`, `settled`, `completed`, `paid`, `filled`, or equivalent
+       - if the bug can advance status, totals, checkpoints, epochs, vesting, distribution progress, or settlement flags without moving the intended assets, test whether any onchain or offchain component would treat that state as final and release value, reputation, inventory, unlock rights, or future payouts elsewhere
+       - if the attacker does not directly receive protocol-held funds, still test whether the attacker profits by retaining inventory, escaping liabilities, avoiding fees, preserving collateral, shifting losses to recipients, or creating a free option that can be monetized later
+     - **State-finality / obligation-evasion checks**:
+       - whether any public or weakly-gated function can mark work as done (`distributed`, `settled`, `fulfilled`, `cancelled`, `paid`, `completed`, `claimed`, `processed`) before the intended asset movement is proven
+       - whether the state transition is keyed off requested amount, rounded amount, counters, indexes, hashes, signatures, or booleans rather than actual transferred value
+       - whether the actor who can trigger finality is the same actor economically obligated to provide assets, or can collude with that actor through another address
+       - whether a malicious payer, distributor, seller, borrower, liquidator, or order maker can use two addresses so one satisfies the business role and the other triggers the buggy public completion path
+       - whether recipients, counterparties, offchain operators, or downstream contracts lose the ability to recover once the bad finality bit is set
+       - whether retries, top-ups, cancellations, or alternative settlement paths are blocked once the protocol believes the action is complete
+       - whether a zero-transfer, partial-transfer, fee-on-transfer, or floor-rounded transfer can still consume the full entitlement or mark the full obligation as satisfied
+       - whether later logic trusts cumulative totals or status flags without reconciling actual token/ETH deltas
      - **Reward / solvency accounting pass**:
         - whether a new deposit, fee, or `netValue` is counted both as immediately distributable reward and as fully withdrawable principal / share value
         - whether reward accrual increases liabilities without creating segregated backing assets or reserves
