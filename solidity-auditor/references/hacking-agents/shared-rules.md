@@ -24,6 +24,8 @@ Equality conditions are attack surface. If two roles, accounts, assets, ids, or 
 For hook-driven tokens and router/pair systems, reconstruct this exploit chain before dropping or demoting a candidate: `how inventory is sourced -> how bad state is queued -> how queued state is realized -> how the final reserve distortion is monetized`.
 Compose weak signals before dropping them. If two leads share an id, asset, status flag, role, approval, helper, dependency, time boundary, or storage bucket, synthesize one combined exploit attempt.
 False finality is value-relevant: if code can mark `paid`, `distributed`, `settled`, `completed`, `cancelled`, or `claimed` without reconciling actual token/ETH/NFT movement, test payer-caller collusion and recovery/retry behavior before demotion.
+For every major value path, reconstruct the generic lifecycle: `source of truth -> derived artifact / receipt / preview / queue / finality bit -> invalidation rules -> realization path`. If any later step trusts the artifact without re-proving the original condition, treat it as a first-class exploit surface even if no named bug family matches.
+Do not anchor on one historical exploit shape. Generalize each candidate to its mechanism class: temporary-precondition persistence, deferred realization, source-of-truth split, obligation mismatch, actor collapse, or aliasing. Then sweep the full bundle for all manifestations of that mechanism.
 
 ## Do not report
 

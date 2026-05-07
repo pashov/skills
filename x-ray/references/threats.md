@@ -11,6 +11,34 @@
 
 This reference provides per-protocol-type threat intelligence. The skill auto-classifies the protocol from code signals in Step 2, then uses the matching profile(s) to weight adversaries, attack patterns, and surfaces in the threat model.
 
+## Cross-Type Exploit Overlays
+
+Apply these overlays regardless of protocol type. They are mechanism classes, not protocol families:
+
+1. **Temporary-precondition persistence**
+   - A transient condition such as reserve skew, stale price, threshold crossing, construction-time identity, or role/config window creates durable queued state, cached state, or entitlement.
+   - Later code realizes that artifact without re-proving the original condition.
+
+2. **Source-of-truth split**
+   - Canonical state lives in one bucket while pricing, payout, preview, quote, or finality logic trusts a cached / derived / previewed / staged / passive-balance view.
+   - Attack goal: move the two views apart, then realize value using the more favorable one.
+
+3. **False finality / obligation evasion**
+   - Code marks `paid`, `claimed`, `settled`, `completed`, `distributed`, `processed`, or `cancelled` without reducing the same liability or without proving the asset movement.
+   - Attack goal: keep the asset, escape the obligation, or drain pooled inventory on replay / retry.
+
+4. **Actor split / identity collapse**
+   - Caller, signer, funder, allowance owner, credited account, beneficiary, debtor, liquidator, recipient, helper, or referrer can differ or collapse unexpectedly.
+   - Attack goal: one actor bears the cost while another receives the value, or two supposedly distinct buckets alias.
+
+5. **Deferred realization against pooled state**
+   - One action writes global pending state; a later unrelated action realizes it against shared reserves, liabilities, or claim buckets.
+   - Attack goal: poison pooled state cheaply, then choose the later realization context that maximizes extraction.
+
+6. **Bootstrap / dust-denominator regime change**
+   - Empty or near-empty supply, debt, reserve, or share state makes ratios, prices, indices, or liquidation thresholds qualitatively different.
+   - Attack goal: enter in the dust regime, write favorable state, then realize it after normal liquidity or liability returns.
+
 ## Protocol Classification Signals
 
 Detect protocol type from function signatures, state variables, and architectural patterns found during source file reading in Step 2. A protocol may match **multiple types** (hybrid). Rank by signal density — the type with the most matches is primary.

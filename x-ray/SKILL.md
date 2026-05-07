@@ -21,6 +21,23 @@ Rules:
 - Attack surfaces must be falsifiable: each bullet should contain a code reference plus the specific state, value, or dependency relationship that can be tested.
 - Compose related weak signals before prioritizing surfaces: shared ids, assets, status flags, roles, approvals, reserve buckets, dependencies, or time boundaries often matter more than isolated symptoms.
 - Treat false-finality and obligation-evasion mechanisms as economic surfaces when state can advance without proving the intended asset movement.
+- For every major value path, name the canonical source of truth and every derived artifact that can outlive it: previews, queued state, cached balances, receipts, finality bits, claim records, staged reserves, snapshots.
+- Treat temporary-precondition persistence as a first-class surface: if a transient condition can write durable state that a later call can realize, x-ray must surface that mechanism even when the exploit class has no standard name.
+- Surface fuzz-worthy mechanisms explicitly: if a subsystem has stateful accounting, queues, epochs, share-price math, or repeated-step rounding, x-ray must name the exact invariant or sequence that should be fuzzed later.
+- Surface composable weak signals explicitly: if two individually modest code smells could form one public exploit chain, x-ray must state that composition candidate rather than listing them as isolated notes.
+
+## Artifact-closure standard (MANDATORY)
+
+X-Ray must inventory the **entire runtime artifact tree** for the target folder, not just the obvious Solidity sources.
+
+When the target contains bundle-style directories or manifests such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `project.json`, `contract-list.json`, or `contract-variables.json`, you MUST:
+
+- enumerate them
+- classify each artifact family as `source`, `abi-only`, `bytecode-only`, `proxy-only`, `decompiled`, or `runtime-metadata`
+- state whether each family is on a live value path, architecture path, or irrelevant side path
+- carry unresolved but value-path-relevant families forward into the x-ray output as blockers
+
+If a related-contract family is present but not yet source-closed, x-ray must show that gap explicitly in architecture and threat modeling. It may not silently disappear from the system map.
 
 ## Progress tracking (MANDATORY)
 
@@ -48,6 +65,19 @@ If the user specifies a path, use it as project root. Otherwise use cwd. If no `
 ```bash
 mkdir -p [project-root]/x-ray && bash $SKILL_DIR/scripts/enumerate.sh [project-root] [src-dir]
 ```
+
+**Immediately after enumeration**, inventory bundle artifacts in the project tree. In the same step, search for:
+
+- `project.json`
+- `contract-list.json`
+- `contract-variables.json`
+- `main-project/index.json`
+- `related-contracts/index.json`
+- `abi/**/*.json`
+- `bytecode/**/*`
+- `decompiled/**/*`
+
+This inventory is mandatory input to architecture closure, not optional enrichment.
 
 **Immediately after**, launch ALL of the following in a single message (parallel):
 
@@ -119,6 +149,7 @@ CRITICAL: Every tool call — Bash, Agent, Read, Grep — MUST be issued in ONE 
 - Skip interfaces: `interfaces/` dirs or filenames `I` + uppercase letter
 - Skip vendored libs: Uniswap FullMath/TickMath, OZ copies
 - When uncertain, include it but exclude from scope table
+- Do **not** skip bundle-local runtime artifacts just because they are not Solidity source. ABI-only, bytecode-only, proxy-only, and manifest artifacts still belong in the architecture and dependency-closure map.
 
 ### Path A: ≤20 source files (direct reads)
 One Read call per file. Do NOT read README, docs, or foundry.toml (already read in Step 1).
@@ -332,10 +363,17 @@ Using the delta writes, guard predicates, enum/one-shot transitions, and invaria
 
 5. **Temporal scan**: For each `block.timestamp` or `block.number` comparison involving a storage variable (deadline, lastUpdate, lockPeriod, interval), extract the temporal constraint. Note whether the constraint is checked-then-updated (safe) or updated-then-checked (potential stale read).
 
-6. **Cross-contract scan**: For each external call where the return value is used in arithmetic or a storage write, record what the caller assumes. Then find the callee's write sites for that state. If the callee can change it independently (via another function), the assumption is unvalidated — record as a cross-contract invariant with On-chain=No. ONLY include rows where BOTH sides (caller assumption + callee write sites) are inside the scope files. Do not speculate about out-of-scope contracts.
+6. **Derived-state / entitlement scan**: For each preview, cache, queue, pending record, claim record, receipt, status bit, or settlement/finality marker, identify:
+   - the canonical storage state it derives from
+   - the function(s) that create or refresh the artifact
+   - the function(s) that invalidate or consume it
+   - whether any value-moving path trusts the artifact without re-checking the canonical state
+   Record mismatches as single-contract invariants if all writers are local, or as cross-contract invariants if the canonical state and artifact writers live in different scoped contracts.
+
+7. **Cross-contract scan**: For each external call where the return value is used in arithmetic or a storage write, record what the caller assumes. Then find the callee's write sites for that state. If the callee can change it independently (via another function), the assumption is unvalidated — record as a cross-contract invariant with On-chain=No. ONLY include rows where BOTH sides (caller assumption + callee write sites) are inside the scope files. Do not speculate about out-of-scope contracts.
    - Also include: **setter-vs-invariant mismatches** — where an admin setter writes a storage value without checking that existing invariants still hold (e.g., `setReserveCapacity` without checking against current liquidity). These are cross-contract in the sense that the setter is one contract/function and the invariant is enforced elsewhere.
 
-7. **Economic derivation**: After steps 1-6, check if any combination of single-contract + cross-contract invariants implies a higher-order property. Each economic invariant must cite the specific I-N / X-N IDs it derives from. If the derivation chain has a gap (one of the source invariants is On-chain=No), the economic invariant is also On-chain=No.
+8. **Economic derivation**: After steps 1-7, check if any combination of single-contract + cross-contract invariants implies a higher-order property. Each economic invariant must cite the specific I-N / X-N IDs it derives from. If the derivation chain has a gap (one of the source invariants is On-chain=No), the economic invariant is also On-chain=No.
 
 **Verification gate** (MANDATORY before including any inferred invariant):
 - Conservation: confirm the Δ-pair exists at the cited lines (same function body).
@@ -345,6 +383,7 @@ Using the delta writes, guard predicates, enum/one-shot transitions, and invaria
 - Ratio: confirm the formula is exact and the snapshot ordering (before/after other writes in the same function) is noted.
 - StateMachine: confirm both sides of the edge exist AND confirm no reverse path. If there IS a reverse path, it's a togglable flag — drop.
 - Temporal: confirm the comparison involves a storage variable, not just block.timestamp vs parameters.
+- Derived-state / entitlement: confirm both the canonical state and the derivative artifact writers/readers are explicitly cited, and confirm the mismatch is about a persistent artifact rather than a single transient local variable.
 - Cross-contract: confirm both caller usage AND callee write site exist in scope.
 - Economic: confirm all referenced I-N / X-N IDs are themselves verified.
 - If you cannot verify → drop the row. "Could not verify" is not a valid row.
@@ -364,6 +403,9 @@ Build up to 8 composite rows. Each row must combine at least two weak signals th
 - raw balance read plus formal accounting write
 - direct token/NFT/native receipt plus later withdrawal/claim logic
 - live proxy/registry/dependency opacity plus value-moving selector
+- temporary condition plus persistent artifact
+- canonical source-of-truth bucket plus derived preview/claim/finality state
+- actor who creates state plus different actor who can later realize it
 
 For each row, record:
 - `connector`: the shared variable, id, asset, role, dependency, or time boundary
@@ -446,6 +488,13 @@ python3 $SKILL_DIR/scripts/generate_svg.py x-ray/architecture.json x-ray/archite
 
 Then follow the rendering, audit checklist, and fix loop in the architecture guide section of `references/templates.md`. Max 3 iterations. Cleanup temp files after (including `x-ray/git-security-analysis.json`).
 
+The architecture output is incomplete unless it explicitly shows:
+
+- the root bundle contracts
+- every related-contract family that is on a value path
+- which nodes are verified source vs ABI-only vs bytecode-only vs unresolved proxy/dependency
+- where the flow stops because a dependency is unresolved
+
 ### 3c. Terminal Verdict
 
 After all files are written and cleanup is done, read the `## X-Ray Verdict` section from the generated `x-ray/x-ray.md` and print it verbatim to the terminal. Do NOT paraphrase, summarize, or rewrite — copy the exact tier, justification, and key observations as they appear in the file.
@@ -454,6 +503,7 @@ After all files are written and cleanup is done, read the `## X-Ray Verdict` sec
 
 - Under 500 lines. Protect threat model, invariants, test gaps, git analysis, verdict — compress other sections if needed.
 - No fabrication. When uncertain, state the exact unresolved artifact, dependency, storage value, or write site instead of using generic uncertainty language.
+- Do not label coverage as complete if any runtime-relevant artifact family inside the target folder or `related-contracts/` tree is missing from the architecture / dependency map.
 - Steps 1-3 fully autonomous. No user interaction required.
 - Always group contracts by subsystem in scope table.
 - Single pass. No partial outputs.

@@ -254,6 +254,11 @@
 - **D:** Arithmetic in `unchecked {}` (>=0.8) without prior bounds check: subtraction without `require(amount <= balance)`, large multiplications. Any arithmetic in <0.8 without SafeMath.
 - **FP:** Range provably bounded by earlier checks in same function. `unchecked` only for `++i` loop increments where `i < arr.length`.
 
+**51. Transient Reserve Donation -> Stale Classifier -> Cheap Inventory Rebuy**
+
+- **D:** Contract classifies a transfer / sell / LP-leg / fee bucket using temporary raw balance skew such as `token.balanceOf(pair) > reserve`, `quoteBalance > reserveQuote`, or similar. Attacker temporarily donates the quote asset or reserve asset, triggers the classifier so global state records `pending`, `lpPart`, `discount`, or other deferred bucket, then immediately recovers the donation with `skim`, helper withdrawal, or paired action. A later tiny trade consumes the stale state and extracts hidden/orphaned inventory cheaply because `balanceOf(pair)` / reserve hook / discount logic no longer matches real reserves.
+- **FP:** Classifier uses immutable or synchronized state only, or any temporary donation is either impossible to reclaim, immediately invalidates the staged state, or cannot affect later swap / reserve accounting after the skew is removed.
+
 **51. Share Redemption at Optimistic Rate**
 
 - **D:** Shares redeemed at projected end-of-term rate rather than current realized rate. Early redeemers take more than proportional share — late redeemers find vault depleted.

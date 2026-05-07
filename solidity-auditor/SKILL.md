@@ -57,6 +57,31 @@ You must not leave a finding at a weakly supported middle state like:
 
 when the missing work is simply live-state or explorer validation that you could have done yourself.
 
+## Folder-closure rule (MANDATORY)
+
+When the audit target is a local bundle or project folder, coverage means **artifact closure**, not just wrapper-contract review.
+
+You MUST inventory and classify **every runtime-relevant artifact** under the target folder before you may present the audit as complete. This includes:
+
+- every `.sol` file under the target folder
+- every ABI JSON, deployment manifest, address map, storage snapshot, runtime metadata file, and decompiled file
+- every bytecode-only artifact
+- every file under sibling bundle directories such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `manifests/`, or similarly named runtime-artifact folders
+
+For each artifact, record one of:
+
+- `analyzed directly`
+- `inventory-only but proven irrelevant to value flow`
+- `bytecode-only artifact present`
+- `abi-only artifact present`
+- `blocked pending missing implementation/source/decompilation`
+
+If the target bundle contains `related-contracts/`, those artifacts are **in scope by default** until proven irrelevant to value movement, pricing, settlement, rewards, liquidation, routing, bridging, or governance.
+
+You may summarize irrelevant artifacts by family, but you may not silently skip them.
+
+If any runtime-relevant artifact in the target folder remains unclassified, the audit is incomplete.
+
 ### Mandatory upgrade when a live exploit transaction is supplied
 
 If the user provides a concrete exploit transaction hash, explorer link, trace, or step-by-step live RCA for the same target, that artifact stops being "nice to have" context and becomes **mandatory corroboration work before finalizing severity, confidence, and live status**.
@@ -72,6 +97,101 @@ In that case you MUST:
    - the finding text explicitly names every live-only exploit leg that mattered (for example: day rollover branches, threshold crossing, helper realization, fee-processing side effects, reserve sync points).
 
 It is NOT acceptable to leave a finding at `Live on this deployment: Unknown` once a supplied exploit tx has been source-reconciled and confirms the same bug family.
+
+## Fuzzing and invariant-testing rule (MANDATORY)
+
+Static reading is not enough for stateful accounting systems.
+
+When the target contains any of the following, you MUST plan at least one focused fuzz / invariant-testing pass whenever the local toolchain or existing test harness makes it practical:
+
+- deposit / withdraw / redeem / mint / burn accounting
+- lending indexes, exchange rates, share prices, or NAV math
+- queues, epochs, snapshots, pending / claimable / finalized state
+- rebalance / sync / settlement / liquidation paths
+- callback-heavy, router-heavy, or multi-step helper flows
+- code with meaningful rounding direction changes or sentinel values
+
+The fuzzing pass is not blind random spam. It must be mechanism-directed.
+
+Minimum required targets for fuzz / invariant design:
+
+1. boundary values
+   - zero, one, min amount, max amount, dust, full balance, full debt, sentinel values
+2. ordering
+   - unusual but legal action orderings
+3. actor splits
+   - caller / owner / controller / receiver / beneficiary divergence
+4. state lifecycle
+   - create pending state -> mutate environment -> realize pending state
+5. rounding drift
+   - repeated small actions versus one large action
+6. donation / direct transfer
+   - passive balance changes that bypass formal entrypoints
+
+If fuzzing is practical and you skip it, you must say exactly why.
+If fuzzing reveals that an issue previously treated as a lead can be closed into a public exploit path, it must be promoted to a Finding.
+
+## Live-address reporting rule (MANDATORY)
+
+When a finding, lead, blocker, or live-status statement depends on a deployed runtime path, you MUST name the exact live addresses involved.
+
+At minimum, report the relevant subset of:
+
+- proxy address
+- implementation address
+- facet address
+- diamond/root address
+- router / pair / pool / vault / market / oracle / helper / registry address
+- selector-to-facet routing result when diamond wiring is relevant
+
+Do not write vague phrases like:
+
+- "the live deployment"
+- "the active router"
+- "the old diamond"
+- "the current core"
+
+without also naming the concrete address or address chain.
+
+If the issue is only live on one chain or one deployment family, the report must say exactly which addresses are affected and which checked addresses were not.
+
+If a finding is not immediately live because checked balances were zero or config was inactive, still include the exact checked addresses and the exact live constraint.
+
+## Mainnet-fork PoC rule (MANDATORY)
+
+When the user asks for `poc-mainnet-fork`, a fork test is not a generic reproduction harness. It must answer the exact question:
+
+- `is this exploit actually live on the real deployment`
+
+So the fork artifact must stay tied to real mainnet state.
+
+Required properties:
+
+1. **Same live addresses**
+   - use the real proxy / implementation / router / pool / oracle / helper / token addresses from the live deployment
+   - do not replace critical contracts with local mocks, fake wrappers, or substitute pools if the goal is live exploit validation
+
+2. **Same live state family**
+   - fork a real block from the target chain
+   - keep balances, caps, roles, debt, reserves, prices, and config sourced from the forked chain state
+   - if you must mutate state to reach the vulnerable branch, the mutation must be something a public attacker could actually do on mainnet from that state
+
+3. **Same economic conclusion**
+   - the PoC must report whether the attacker can extract value on that live state
+   - include the concrete live addresses, balances, reserves, and value ceilings that make the answer true or false
+   - if the path fails, the PoC should prove the blocker on fork rather than silently stopping
+
+4. **No synthetic success**
+   - do not force a passing exploit by editing storage, minting fake balances, bypassing guards, or swapping in mock contracts
+   - if success depends on synthetic state, that is not a live mainnet-fork exploit PoC
+
+5. **Binary output**
+   - the final fork artifact must land in one of these buckets:
+     - `confirmed live exploit on fork`
+     - `confirmed blocker on fork`
+     - `incomplete because a critical live dependency is still unresolved`
+
+If the tested fork path does not reproduce profit on the live deployment, the finding must not remain a confirmed exploitable finding merely because the source-level mechanism looks plausible.
 ## Orchestration
 
 **Turn 1 — Discover.** Print the banner, then make these parallel tool calls in one message:
@@ -102,10 +222,14 @@ Before bundling, expand the audit scope and write a hotspot checklist:
    - If the requested contract calls external contracts that hold balances, compute prices, mint/burn claims, settle withdrawals, process deposits, or otherwise move value, those external dependencies are **in scope by default** even if they are referenced only by stored addresses or low-level calls.
    - Stored-address dependencies are not optional. If the named contract calls a `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, `executor`, or similarly stateful external contract during any value-moving path, you must fetch and analyze that dependency or explicitly mark the audit incomplete.
    - If the user provides live proxy addresses or implementation addresses, resolving those live contracts is **mandatory critical-path work**, not optional enrichment. Fetch proxy implementations, verified source, ABI/function names, and linked dependencies before allowing the audit to conclude “dependency unresolved”.
+   - If a local artifact already exists for a dependency but it is only a raw bytecode dump, you must report `bytecode-only artifact present` rather than saying the dependency is missing. Then state the exact additional quality needed: verified source, decompiled source, ABI, selector map, or live dependency mapping.
    - If a value-path dependency is referenced only by a selector-only low-level call, you must still resolve it from the live deployment context when addresses are available. A selector-only dependency on the live path is not grounds to stop at the wrapper.
    - If execution price, reserve mutation, fee application, or invariant enforcement is split across wrapper + hook + helper + math library files, that split path is **critical path** and must be treated as the primary exploit surface, not optional supporting context.
    - If the requested contract or a coupled file uses `receive()`, `fallback()`, `tx.origin`, contract/EOA checks, or reward/claim side effects, those contracts are **in scope** even if they look like periphery.
    - If the codebase is a fork or near-fork of a known protocol, import-paths, naming, storage layout, comments, and copied function signatures must be used to identify the parent protocol lineage. Once lineage is identified, inherited issue classes from that parent protocol and its common forks are **in scope by default** unless clearly removed by source changes.
+   - If the target path is a bundle directory containing artifact folders such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `contract-list.json`, `contract-variables.json`, or `project.json`, you MUST inventory all of them before narrowing to exploit families.
+   - If a contract appears only in ABI form or bytecode form inside the bundle, that still counts toward coverage accounting. You must classify whether it is value-path relevant, irrelevant, or blocking.
+   - “100% reviewed” for a bundle means every runtime-relevant artifact in the folder tree was either analyzed directly or explicitly classified with a reason. It does not mean “I read the main Solidity files and inferred the rest.”
 
 2. **Discovery phase is mandatory before validation.**
    - Before spawning agents, build a `# Discovery Checklist` that explicitly records:
@@ -153,12 +277,24 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - if any public or weakly-gated path can withdraw tokens from `address(this)` or from an arbitrary approved `from` address without tightly binding ownership/intent, treat it as a top-priority exploit candidate and complete the full profit chain
      - **Dependency-closure pass**:
        - identify every external contract address stored in state or returned by another contract that is used during deposit, withdraw, mint, burn, claim, settlement, pricing, reward, liquidation, or upgrade logic
+       - build an **artifact-closure ledger** for the target folder itself:
+         - every verified source artifact
+         - every ABI-only artifact
+         - every bytecode-only artifact
+         - every proxy artifact
+         - every decompiled artifact
+         - every manifest/address-map/storage-snapshot artifact that changes live routing or balance interpretation
        - for each such dependency, record whether it was:
          - resolved to a live implementation and analyzed directly
          - analyzed directly
          - fetched but blocked by missing source / missing verification / tooling failure
          - proven irrelevant to value movement
+       - for each bundle-local artifact in the artifact-closure ledger, record whether it was:
+         - analyzed directly
+         - grouped into an irrelevant family with explicit reason
+         - left as ABI-only / bytecode-only / proxy-only and whether that blocks any live value path
        - if a dependency remains unresolved and it is part of a value-moving or price-setting path, mark the audit as incomplete and do not present the result as full coverage
+       - if a bundle-local artifact remains unclassified, mark the audit as incomplete and do not present the result as full coverage
        - treat low-level `call`, `delegatecall`, selector-only calls, and decompiled external references as mandatory coupling evidence, not optional context
        - if the user supplied addresses, tx hashes, or traces for that dependency path, record the exact fetch attempts you made before accepting “blocked”, including explorer pages, proxy implementation lookups, and selector-resolution attempts
      - **Optional corroboration pass**:
@@ -168,6 +304,9 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - do not require external corroboration to report a finding; source-level exploit reconstruction remains sufficient when the path is complete
      - **Assumption inversion**:
        - what assumptions the code appears to rely on
+       - what state is treated as the source of truth versus cached, previewed, queued, claimable, settled, finalized, or otherwise derived state
+       - whether a temporary condition can write a persistent artifact that survives after the condition is gone
+       - whether a record can be marked `paid`, `claimed`, `settled`, `distributed`, `cancelled`, `completed`, `withdrawn`, or otherwise finalized before the corresponding asset movement is irreversibly proven
        - whether custom policy logic lives only in `transfer()` while `transferFrom()` or `_transfer()` remains inherited or differently guarded
        - whether standard router / allowance / permit / helper flows therefore bypass the advertised trading or fee logic
        - what happens if caller is a contract instead of an EOA
@@ -179,6 +318,25 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - what happens if helper contracts are called directly, before, after, or instead of the intended wrapper path
        - what happens if first caller / first deposit / first NFT / first registration / first config write is malicious
        - what happens if external tokens are fee-on-transfer, rebasing, blacklisting, or non-standard
+     - **State lifecycle / deferred realization checks**:
+       - identify every artifact that can grant or influence value later: shares, receipts, pending withdrawals, queued burns, staged reserves, snapshots, previews, cached prices, reward debt, settlement flags, claim records, debt shares, entitlement ids, and finalized-status bits
+       - for each artifact, record:
+         - who can create it
+         - what state or assumption it snapshots
+         - who can mutate or invalidate it
+         - who can realize it later into assets, borrow power, reserve movement, or obligation release
+       - ask whether the creation precondition can be transient while the artifact persists
+       - ask whether the realizing actor can differ from the creating actor
+       - ask whether the artifact is consumed exactly once, or can be partially consumed / replayed / overwritten / netted incorrectly
+     - **Entitlement / obligation mismatch checks**:
+       - identify every state variable that authorizes `withdraw`, `redeem`, `claim`, `borrow`, `refund`, `settle`, `release`, `liquidate`, or `rescue`
+       - identify every state variable that says the protocol has already satisfied an obligation, such as `paid`, `settled`, `distributed`, `claimed`, `processed`, `cancelled`, or `completed`
+       - verify that asset movement, liability reduction, and entitlement invalidation happen against the same source-of-truth bucket rather than only an auxiliary cache/list/index/status flag
+       - verify that preview / quote / claim / settlement math and execution math consume the same effective quantity rather than divergent snapshots
+     - **Actor / identity split checks**:
+       - enumerate the actor roles within each economic action: caller, signer, funder, allowance owner, credited owner, debtor, beneficiary, liquidator, referrer, recipient, sink, helper, and final payout recipient
+       - test whether any two supposedly distinct actors can collapse to the same address or whether one actor can fund an action while another receives the benefit
+       - test whether one actor can write shared global state while another actor later realizes it against pooled inventory
      - **Unusual sequence checks**:
        - call before init
        - claim before settle
@@ -193,6 +351,16 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - mix helper + main contract entrypoints in one path
        - self-liquidate / self-seize / self-refund / self-withdraw where caller and target are the same address
        - same-market / same-asset paths where borrow asset, collateral asset, payout asset, or accounting bucket collapse to the same value
+     - **Combination / composition checks**:
+       - identify whether two or more individually weak issues can compose into one public exploit chain
+       - explicitly test whether a lead in one subsystem becomes exploitable only after:
+         - a stale-state write from another subsystem
+         - a helper or router path that changes actor identity
+         - a rounding mismatch that creates realizable dust
+         - a donation / reserve skew that arms an otherwise harmless path
+         - a deferred claim / queue / epoch / batch realization step
+       - if the composed path closes to `public trigger -> state corruption or obligation escape -> extraction`, it is a Finding, not a Lead
+       - the final description must name the component parts of the composition rather than reporting each weak signal separately
      - **Fork-lineage / inherited-bug checks**:
        - whether the code is a fork / close derivative of Aave, Compound, Uniswap, MasterChef, ERC4626 vaults, lending markets, CDPs, gauges, or common staking vaults
        - whether the fork retained known attack surfaces from the parent design even if the current diff looks unrelated
@@ -225,6 +393,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - whether that rewrite can temporarily reclassify locked or unsellable assets into the priced / sellable reserve used by mint, burn, swap, redeem, or withdrawal math
        - whether a later function restores accounting only after the pricing or payout step has already consumed the corrupted reserve state
        - whether a profitable loop exists of the form `mint/buy -> sync/update -> burn/sell -> repeat`
+       - whether a temporary donation or raw-balance skew can make a classifier write deferred global state that survives after the skew is removed
+       - whether a later tiny trade, skim, sync, or helper call can consume that stale state to extract hidden inventory
      - **LP reserve destruction / pair-burn checks**:
        - if any contract can move inventory directly out of a pair / vault / market / reserve-holding address without a normal priced swap, LP burn, or user-authorized withdrawal, treat that primitive as a top-priority exploit candidate immediately
        - explicitly search for internal token-side reserve extraction patterns such as `super._transfer(pair, sink, amount)`, raw `transferFrom(pair, ...)`, pair `skim`, pair `burn`, helper-mediated pair withdrawals, or any equivalent mutation that removes inventory from the reserve-holding address without paying the quote side
@@ -235,6 +405,9 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - decompiler uncertainty on downstream settlement logic lowers confidence, but it is not sufficient reason to stop before testing whether the upstream inventory drain already gives the attacker extractable inventory or reserve asymmetry
        - whether the intended sell / buy / fee / anti-bot policy is attached only to `transfer()` while normal router flow uses `transferFrom()`
        - whether a public actor can use `transferFrom()` or other inherited paths to source inventory, bypass fees, or avoid trading restrictions before or after the pair-burn step
+       - whether LP-leg / sell-leg / fee-leg classification depends on temporary `balance > reserve` or `quote > reserveQuote` conditions that can be attacker-created and then unwound
+       - whether `pending` / `lpPart` / deferred burn / fee buckets or `balanceOf(pair)` discounts persist after the temporary reserve skew is removed
+       - whether a full exploit chain exists of the form `buy -> transient donation -> classified transfer -> donation recovery -> tiny rebuy of discounted inventory -> resale`
        - whether any public transfer hook, sell hook, pending-burn variable, fee bucket, or maintenance path can burn tokens directly from the LP/pair address
        - whether the amount burned from the pair is fed by public user flow such as sells, transfers, or swaps rather than privileged-only admin calls
        - whether the contract calls `sync()` after burning pair inventory, making the reserve distortion immediately exploitable
@@ -374,6 +547,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - for each family, record whether review is complete, incomplete, blocked, or irrelevant
        - if one major finding is found early, continue auditing all remaining critical paths before ranking findings or writing the report
        - if a later path shows public pair-balance destruction, deferred pair-burn realization, or reserve mutation followed by `sync()`, rank that exploit above softer accounting, DoS, or owner-takeover issues unless the user explicitly asked for a different emphasis
+       - if a public exploit is real and source-complete but the observed live profit is small, do not demote it to a Lead for that reason alone; report it as a Finding and state observed profit, theoretical max impact, and the live constraints that capped extraction
        - if the code exposes all pieces of an exploit chain across different files or helper contracts, the audit is not complete until those pieces are synthesized into one end-to-end attack path or concretely disproven
        - for lending systems specifically, do not finalize before checking at least:
          - complete pool / market / reserve enumeration
@@ -402,6 +576,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
        - these aliasing checks are source-level requirements and must be performed even without any exploit hint, trace, or onchain incident context
        - if any critical family is left unchecked, the audit is incomplete and must not be presented as fully covered
        - if any value-moving external dependency remains unchecked, the audit is incomplete and must not be presented as fully covered
+       - if any bundle-local ABI-only / bytecode-only / proxy-only artifact that sits on a live value path remains unchecked, the audit is incomplete and must not be presented as fully covered
      - **Weird-machine candidates**:
        - partial failure / `catch` / fallback branches
        - stale cached state vs live state
@@ -438,9 +613,12 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - whether the approximated execution price differs from the true curve integral or exact invariant solution
      - whether the exact exploit path requires a sentinel recipient or sender such as `address(0)`, dead address, pair, router, or staking contract to bypass a guarded branch
      - whether the exploit relies on consuming stale pending state before the current swap/order is accounted, rather than on the current action alone
+     - whether a transient donation or raw-balance skew can flip the classification branch, be removed immediately, and still leave exploitable stale state behind
+     - whether `balanceOf(pair)` or equivalent reserve hooks can hide orphaned inventory from a later tiny buy/swap
    - When a wrapper delegates the real pricing logic, the checklist must name both the wrapper and the delegated files.
    - For any custom curve or nonlinear helper-priced system, one agent must explicitly search for profit from repeated alternating swaps and compounding micro-edges rather than only one-shot drains.
    - For any token / AMM system that can touch pair balances, one agent must explicitly reconstruct the full chain `public user flow -> pending bucket / deferred mutation -> pair-side burn or reserve mutation -> sync/update -> final extraction trade`, even if a simpler direct bug has already been found elsewhere in the codebase.
+   - For any token / AMM system that classifies sells or LP-adds using current pair balances versus reserves, one agent must explicitly test the exact chain `temporary donation -> classified transfer -> donation recovery -> stale bucket / discounted pair inventory -> tiny extraction trade -> resale`, and the audit must not conclude before that chain is either completed or concretely disproved.
    - For any token / AMM system with a public or permissionless helper/distributor/mining/reward contract, one agent must explicitly test whether that helper can be the unprivileged trigger for the reserve-mutation chain, even if the final reserve-touching function is role-gated on the token itself.
    - For any token / AMM system where rewards or settlements route through an intermediate `proof`, `power`, `mining`, `distributor`, or helper contract, one agent must explicitly test the exact chain `claim/reward/settlement trigger -> helper transfer/top-up -> pair inventory extraction -> sync/update -> quote-asset unwind`, and the audit must not conclude before that chain is either completed or concretely blocked.
    - For any token / AMM system that records deferred burn / pending burn / fee bucket / sell bucket state, one agent must explicitly test the exact chain `inventory accumulation -> sell or transfer creates deferred bucket -> public helper or maintenance call realizes pair-side mutation -> sync/update -> attacker dumps inventory`, and must not clear the system until that sequence is either proved profitable or concretely refuted.
@@ -561,6 +739,7 @@ Before report formatting, perform a **Critical Surface Completion Review**:
 - if a stronger direct public exploit is found later in another critical path, it must replace weaker earlier findings as the primary finding
 - if a public `claim/reward/helper -> pair/vault reserve extraction -> sync/update/finalization -> unwind` chain is still unresolved, the audit is incomplete and must not be finalized as if coverage were complete
 - if review of any critical family remained incomplete, say so explicitly and do not imply full audit coverage
+- if any runtime-relevant artifact under the target folder or `related-contracts/` tree remained unclassified, say so explicitly and do not imply full audit coverage
 - when multiple findings exist, rank the more direct live public cash-out / solvency break above setup, config, or takeover issues unless the user asked for a different emphasis
 
 1. **Deduplicate.** Parse every FINDING and LEAD from all 9 agents. Group by `group_key` field (format: `Contract | function | bug-class`). Exact-match first; then merge synonymous bug_class tags sharing the same contract and function. Keep the best version per group, number sequentially, annotate `[agents: N]`.

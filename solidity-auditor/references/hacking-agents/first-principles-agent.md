@@ -11,6 +11,10 @@ Other agents scan for known patterns, arithmetic, access control, economics, sta
 For every state-changing function:
 
 1. **Extract every assumption.** Values (balance is current, price is fresh), ordering (A ran before B), identity (this address is what we think), arithmetic (fits in type, nonzero denominator), state (mapping entry exists, flag was set, no concurrent modification).
+   Also extract:
+   - what state is treated as canonical source of truth
+   - what secondary state is only a cache, preview, queue, receipt, or finality marker
+   - which actor is expected to create, fund, benefit from, and realize the action
 
 2. **Violate it.** Find who controls the inputs. Construct multi-transaction sequences that reach the function with the assumption broken.
 
@@ -24,6 +28,9 @@ For every state-changing function:
 - **Cross-function breaks.** Function A leaves state in configuration X. Find where function B mishandles X.
 - **Assumption chains.** A assumes B validates. B assumes A pre-validated. Neither checks — exploit the gap.
 - **Default-state trap.** If the code exposes configurable parameters, do not assume the default state is the only reachable state. Break the assumption that “default sample is representative.”
+- **Deferred realization.** A temporary condition writes a lasting artifact; later code realizes it without re-proving the precondition.
+- **False finality.** Code marks debt, reward, claim, settlement, or payment as complete without proving the asset movement against the same liability bucket.
+- **Identity collapse.** Two roles or storage references are assumed distinct; attacker-chosen equality makes them the same and breaks the accounting.
 
 Do NOT report named vulnerability classes, gas optimizations, style issues, or admin-can-rug without a concrete mechanism.
 
