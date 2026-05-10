@@ -33,6 +33,20 @@ If any top-value public exploit family is still `blocked`, the audit is not comp
 
 ## Dependency Closure Rules
 
+The scope root is the **entire folder tree** the user points at, not just detected Solidity source directories.
+
+Before finalizing, inventory bundle artifact families such as:
+- `main-project/`
+- `related-contracts/`
+- `abi/`
+- `bytecode/`
+- `decompiled/`
+- `project.json`
+- `contract-list.json`
+- `contract-variables.json`
+
+If any runtime-relevant artifact family inside that tree is unclassified, coverage is incomplete.
+
 If a critical path depends on:
 - a proxy
 - a selector-only call

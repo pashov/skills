@@ -61,6 +61,8 @@ when the missing work is simply live-state or explorer validation that you could
 
 When the audit target is a local bundle or project folder, coverage means **artifact closure**, not just wrapper-contract review.
 
+The scope root is the **entire folder tree** rooted at the user-selected target path. Detecting `src/`, `contracts/`, or a specific Solidity entry file helps organize source reads, but it does **not** shrink the audit scope. Anything under the target folder that can affect live dependency routing, deployment mapping, proxy resolution, ABI interpretation, bytecode classification, or value movement remains in scope until explicitly classified.
+
 You MUST inventory and classify **every runtime-relevant artifact** under the target folder before you may present the audit as complete. This includes:
 
 - every `.sol` file under the target folder
@@ -81,6 +83,12 @@ If the target bundle contains `related-contracts/`, those artifacts are **in sco
 You may summarize irrelevant artifacts by family, but you may not silently skip them.
 
 If any runtime-relevant artifact in the target folder remains unclassified, the audit is incomplete.
+
+Minimum folder-closure checklist:
+- enumerate **every file** under the target root into a family bucket
+- explicitly report all sibling runtime folders such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `manifests/`, `live-source/`, and deployment metadata folders when present
+- classify each family as analyzed, irrelevant, blocking, ABI-only, bytecode-only, proxy-only, decompiled, or runtime-metadata
+- do not imply “full audit coverage” if the audit only read Solidity sources under `src/` / `contracts/` while sibling runtime folders under the same target root were not inventoried
 
 ### Mandatory upgrade when a live exploit transaction is supplied
 

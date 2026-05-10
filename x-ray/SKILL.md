@@ -30,6 +30,8 @@ Rules:
 
 X-Ray must inventory the **entire runtime artifact tree** for the target folder, not just the obvious Solidity sources.
 
+When the user points x-ray at a folder or bundle, **the scope root is the entire folder tree rooted at that path**. You may detect a `src/` or `contracts/` directory for Solidity reading, but that does **not** narrow the scope root. Everything under the target folder that can affect runtime interpretation, dependency resolution, proxy routing, deployment mapping, value movement, or architecture closure stays in scope until explicitly classified.
+
 When the target contains bundle-style directories or manifests such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `project.json`, `contract-list.json`, or `contract-variables.json`, you MUST:
 
 - enumerate them
@@ -38,6 +40,12 @@ When the target contains bundle-style directories or manifests such as `main-pro
 - carry unresolved but value-path-relevant families forward into the x-ray output as blockers
 
 If a related-contract family is present but not yet source-closed, x-ray must show that gap explicitly in architecture and threat modeling. It may not silently disappear from the system map.
+
+Minimum closure rule:
+- enumerate **every file** under the target folder at least into a family bucket
+- classify every runtime-relevant artifact as `analyzed directly`, `inventory-only irrelevant`, `blocked pending source/decomp`, `abi-only`, `bytecode-only`, `proxy-only`, or `runtime-metadata`
+- if any runtime-relevant artifact remains unclassified, x-ray is incomplete
+- if any sibling runtime folder exists under the target root (`bytecode/`, `abi/`, `decompiled/`, `related-contracts/`, `manifests/`, etc.), x-ray must say so explicitly in the output even if the family is later judged irrelevant
 
 ## Progress tracking (MANDATORY)
 
@@ -79,6 +87,11 @@ mkdir -p [project-root]/x-ray && bash $SKILL_DIR/scripts/enumerate.sh [project-r
 
 This inventory is mandatory input to architecture closure, not optional enrichment.
 
+You must treat this inventory as **whole-scope folder inventory**, not a side note. Before moving to Step 2, you must know:
+- which artifact families exist anywhere under the target root
+- which folders are plain source folders versus runtime-artifact folders
+- whether any source/abi/bytecode/proxy/decompiled family is outside the detected Solidity `src-dir`
+
 **Immediately after**, launch ALL of the following in a single message (parallel):
 
 **0. Version check** (foreground):
@@ -88,17 +101,17 @@ This inventory is mandatory input to architecture closure, not optional enrichme
 
 **1. Coverage** (`run_in_background: true`):
 
-For Foundry:
+Always launch coverage through the helper wrapper so extracted bundles do not accidentally inherit a parent repo workspace:
+
 ```bash
-cd [project-root] && forge coverage 2>&1 || (echo "RETRYING_WITH_IR_MINIMUM" && forge coverage --ir-minimum 2>&1)
+cd [project-root] && bash $SKILL_DIR/scripts/run_coverage.sh .
 ```
 
-For Hardhat:
-```bash
-cd [project-root] && npx hardhat coverage 2>&1
-```
-
-If toolchain is not installed (e.g., `forge: command not found`, `npx: command not found`, missing `node_modules/`), the coverage command will fail. This is expected — test *existence* is already captured by enumeration in the step above. Coverage failure does NOT mean tests are absent.
+Rules:
+- Coverage is **bundle-local only**. If the target root has no local harness, report coverage as unavailable instead of running the parent workspace.
+- Foundry coverage must be pinned with `--root .` by the wrapper.
+- If toolchain is not installed (e.g., `forge: command not found`, `npx: command not found`, missing `node_modules/`), the coverage command will fail. This is expected — test *existence* is already captured by enumeration in the step above. Coverage failure does NOT mean tests are absent.
+- If the wrapper prints `COVERAGE_UNAVAILABLE: ...`, carry that reason into the Test Analysis section verbatim.
 
 **2. Git security analysis + JSON read** (foreground, single Bash call):
 ```bash
@@ -428,13 +441,14 @@ The matrix itself does not need to be printed unless it materially helps the rea
 **Test presence** is determined by Step 1 enumeration (`test_files`, `test_functions`, `stateless_fuzz`, `foundry_invariant`, `echidna`, `medusa`, `hardhat_fuzz`, `fork`, `certora`, `halmos`, `hevm` counts). These are file-scan results and are ALWAYS reliable regardless of whether the toolchain can compile or run. Multi-signal categories (`echidna`, `medusa`, `certora`, `halmos`) output as `functions:configs` — e.g., `5:1` means 5 test functions + 1 config file detected.
 
 **Coverage metrics** (line/branch %) come from `forge coverage` or `hardhat coverage` which require installed dependencies, successful compilation, and passing tests. Coverage can fail for many reasons unrelated to test quality:
+- The target is an extracted bundle with no **local** harness under its own root
 - Dependencies not installed (`npm install` / `forge install` not run)
 - Compiler errors (stack-too-deep, version mismatch)
 - Test execution failures (missing RPC, fork config)
 
 **Rules:**
 1. Use `test_files`/`test_functions` from Step 1 enumeration for ALL test existence claims. Never infer "no tests" from coverage tool failure.
-2. If coverage fails but enumeration shows tests exist, report: `"[N] test files with [M] test functions detected; coverage metrics unavailable — [failure reason]"`.
+2. If coverage is unavailable because the target has no local harness, report that exact reason. If coverage fails but enumeration shows tests exist, report: `"[N] test files with [M] test functions detected; coverage metrics unavailable — [failure reason]"`.
 3. In "Gaps" subsection, only flag missing test categories (stateless_fuzz=0, foundry_invariant=0, echidna=0, medusa=0, certora=0, halmos=0, hevm=0, fork=0), never flag "no tests" when enumeration shows they exist. Prioritize gaps by audit impact: missing stateful fuzz and formal verification for math-heavy/financial logic is higher priority than missing fork tests.
 4. In git history "Security Observations", never claim "commits without tests" based on coverage failure. The `test_co_change_rate` from git analysis measures file co-modification in commits, not coverage — qualify it as such.
 5. If coverage fails, do NOT let the failure cascade into threat model or risk assessments. Test presence (from enumeration) and coverage metrics (from tooling) are independent signals.

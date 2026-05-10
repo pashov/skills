@@ -32,6 +32,34 @@ _Part of an X-Ray report generation shown below_
 Install latest https://github.com/pashov/skills/ and run x-ray on the codebase
 ```
 
+## Scope Rules
+
+X-Ray inventories the **entire target folder tree**, not just the obvious Solidity source directory.
+
+That includes bundle-style runtime artifacts such as:
+- `main-project/`
+- `related-contracts/`
+- `abi/`
+- `bytecode/`
+- `decompiled/`
+- `project.json`
+- `contract-list.json`
+- `contract-variables.json`
+
+If those artifacts exist, they stay in scope until explicitly classified. Source-only summaries are incomplete.
+
+## Coverage Rules
+
+Coverage is **bundle-local only**.
+
+- X-Ray now runs coverage through `scripts/run_coverage.sh`.
+- For Foundry targets, coverage is pinned with `forge coverage --root .`.
+- Extracted bundles must **not** inherit a parent workspace test suite.
+- If the target root has no local harness, X-Ray should report:
+  - `COVERAGE_UNAVAILABLE: no local test harness under target root`
+
+That is the correct result for extracted bundle folders that contain runtime artifacts but no standalone local tests.
+
 ## Tips
 
 - **Start with Key Attack Surfaces.** They should name concrete mechanisms, not vague prompts.

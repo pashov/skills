@@ -233,7 +233,7 @@ For a visual overview of the protocol's architecture, see the [architecture diag
 | Line coverage | [N% or "Pending" or "Unavailable — [reason]"] | Coverage tool (requires compilation) |
 | Branch coverage | [N% or "Pending" or "Unavailable — [reason]"] | Coverage tool (requires compilation) |
 
-[IMPORTANT: Test file/function counts come from file scanning and are always accurate. Coverage metrics require the toolchain to compile and run — if coverage fails (missing deps, compiler error, stack-too-deep), this does NOT mean tests are absent. State this clearly when coverage is unavailable.]
+[IMPORTANT: Test file/function counts come from file scanning and are always accurate. Coverage metrics require a **bundle-local** toolchain and harness to compile and run — if coverage is unavailable because the target has no local harness, or if coverage fails (missing deps, compiler error, stack-too-deep), this does NOT mean tests are absent. State this clearly when coverage is unavailable.]
 
 ### Test Depth
 
