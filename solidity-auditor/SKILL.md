@@ -75,6 +75,7 @@ For each artifact, record one of:
 - `analyzed directly`
 - `inventory-only but proven irrelevant to value flow`
 - `bytecode-only artifact present`
+- `decompiled source present`
 - `abi-only artifact present`
 - `blocked pending missing implementation/source/decompilation`
 
@@ -89,6 +90,13 @@ Minimum folder-closure checklist:
 - explicitly report all sibling runtime folders such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `manifests/`, `live-source/`, and deployment metadata folders when present
 - classify each family as analyzed, irrelevant, blocking, ABI-only, bytecode-only, proxy-only, decompiled, or runtime-metadata
 - do not imply “full audit coverage” if the audit only read Solidity sources under `src/` / `contracts/` while sibling runtime folders under the same target root were not inventoried
+
+Important artifact-quality rule:
+
+- A file inside a folder named `bytecode/` is **not automatically** a `bytecode-only artifact`.
+- If the file contains recovered Solidity-like structure, functions, storage variables, comments such as `Decompiled by ...`, or otherwise readable decompiled logic, classify it as **`decompiled source present`**.
+- Reserve `bytecode-only artifact present` for raw runtime / creation bytecode or artifacts without recoverable logic structure.
+- When a decompiled artifact is used for critical-path reasoning, say so explicitly and note any remaining confidence loss versus verified source.
 
 ### Mandatory upgrade when a live exploit transaction is supplied
 
@@ -228,11 +236,22 @@ Before bundling, expand the audit scope and write a hotspot checklist:
      - files defining or mutating symbols matched by `getAmountOut`, `getUnspecifiedAmount`, `price`, `reserve`, `sync`, `ln`, `exp`, `pow`, `curve`, `oracle`, or fee-adjusted amount variables
    - If the requested contract delegates pricing or reserve accounting, the helper/hook/library files are **in scope** even if the user named only the wrapper.
    - If the requested contract calls external contracts that hold balances, compute prices, mint/burn claims, settle withdrawals, process deposits, or otherwise move value, those external dependencies are **in scope by default** even if they are referenced only by stored addresses or low-level calls.
+   - **Token bundles are not presumed self-contained.** If a token contract stores or derives any external address that can affect fees, rewards, staking, dividends, burns, claims, swaps, routing, reserve sync, treasury movement, anti-bot gating, accounting realization, or payout settlement, that dependency is **critical path by default** until proven irrelevant.
+   - For token / fee-token / reflection / rebasing / trading-token systems, you must explicitly expand scope to every externalized dependency discovered from:
+     - constructor wiring
+     - owner/config setter parameters
+     - public storage slots / getters
+     - emitted events
+     - router/pair/factory queries
+     - helper receiver contracts
+     - staking / mining / dividend / proof / rewards / treasury / vault / distributor / claim / burn / recycle / settlement addresses
+   - Do not let friendly names narrow scope. The dependency rule is semantic, not name-based: any external contract that can hold value, receive token flow, return accounting state, authorize level/role changes, or trigger downstream transfer side effects is in scope even if it is named something innocuous or unrelated.
    - Stored-address dependencies are not optional. If the named contract calls a `bank`, `storage`, `payment`, `oracle`, `vault`, `escrow`, `distributor`, `router`, `helper`, `executor`, or similarly stateful external contract during any value-moving path, you must fetch and analyze that dependency or explicitly mark the audit incomplete.
    - If the user provides live proxy addresses or implementation addresses, resolving those live contracts is **mandatory critical-path work**, not optional enrichment. Fetch proxy implementations, verified source, ABI/function names, and linked dependencies before allowing the audit to conclude “dependency unresolved”.
    - If a local artifact already exists for a dependency but it is only a raw bytecode dump, you must report `bytecode-only artifact present` rather than saying the dependency is missing. Then state the exact additional quality needed: verified source, decompiled source, ABI, selector map, or live dependency mapping.
    - If a value-path dependency is referenced only by a selector-only low-level call, you must still resolve it from the live deployment context when addresses are available. A selector-only dependency on the live path is not grounds to stop at the wrapper.
    - If execution price, reserve mutation, fee application, or invariant enforcement is split across wrapper + hook + helper + math library files, that split path is **critical path** and must be treated as the primary exploit surface, not optional supporting context.
+   - If a token contract triggers external side effects during `transfer`, `_update`, buy/sell hooks, staking callbacks, router callbacks, or threshold-based maintenance branches, then those downstream contracts are part of the same exploit surface even if the token itself never uses `delegatecall` or inheritance to reach them.
    - If the requested contract or a coupled file uses `receive()`, `fallback()`, `tx.origin`, contract/EOA checks, or reward/claim side effects, those contracts are **in scope** even if they look like periphery.
    - If the codebase is a fork or near-fork of a known protocol, import-paths, naming, storage layout, comments, and copied function signatures must be used to identify the parent protocol lineage. Once lineage is identified, inherited issue classes from that parent protocol and its common forks are **in scope by default** unless clearly removed by source changes.
    - If the target path is a bundle directory containing artifact folders such as `main-project/`, `related-contracts/`, `abi/`, `bytecode/`, `decompiled/`, `contract-list.json`, `contract-variables.json`, or `project.json`, you MUST inventory all of them before narrowing to exploit families.
@@ -254,6 +273,8 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - total supply / total debt / cash / reserves / exchange rate / indexes
          - oracle source and oracle decimals
          - wrapper implementation and debt-token implementations
+         - collateral factor / liquidation threshold / reserve factor / pause state / admin / implementation / rate model
+      - for Compound / Venus / Compound-like lending forks, a "safe by inheritance" conclusion is forbidden until live config has been enumerated market-by-market on the active deployment; shared implementation review is necessary but never sufficient
      - **Public surface inventory**:
        - every `external` / `public` state mutator
        - every `payable` function
@@ -776,6 +797,12 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - whether live reserve depth and round-trip costs still leave attacker profit after taxes, fees, and slippage
    If any of these remain unresolved, downgrade to `Code-Level / Config-Dependent` or `LEAD`.
 
+   **No unquantified live public-profit leads.** If a candidate is classified as `Public Exploitable`, is live or plausibly live on the checked deployment, and the core question is attacker profit, you must force it into exactly one of these outcomes before finalizing:
+   - `Finding` — attacker net profit is quantified and positive under a coherent end-to-end path
+   - `Rejected / Code-Level / Config-Dependent` — attacker profit is quantitatively blocked, with the blocker stated explicitly (for example: manipulation cost exceeds extraction, live liquidity depth is too thin, pending rewards are too small, resale path is too shallow, taxes/fees dominate, or the attacker must subsidize the route)
+   - `Coverage unresolved / audit incomplete` — profitability cannot be closed because required live variables, dependencies, or runtime behavior remain unresolved
+   Do not leave such a candidate as a generic `LEAD` with only qualitative wording like "plausible", "possible", or "may be profitable".
+
    **Profit path table is mandatory for any issue that may be attacker-profitable.** For each such finding, explicitly fill:
    - `value source`
    - `trigger function`
@@ -814,10 +841,13 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - map user-facing docs/contracts to the actual live deployed contracts
    - trace all state-variable-held external dependencies that can move value
    - include manager / escrow / registry / oracle / subscriber / treasury dependencies that are actually called in the live flow
+   - for token-centric bundles, identify all external contracts actually reached by buy/sell/claim/stake/dividend/burn/settlement flows before concluding the bundle is “just a token”
+   - for token-centric bundles, use live tx history, emitted events, and runtime state to discover hidden critical-path dependencies when the local folder only contains the token source
    - distinguish wrapper/periphery issues from the contracts where value is actually controlled
    - check whether docs-promised liquidity / reward / burn / rebalance / mining features are live, dead, or only threshold-dormant onchain
    - determine whether the system is a fork or close derivative of a known protocol, and if so, explicitly investigate the parent protocol's historically exploited issue classes
-   - for lending / vault / market protocols, explicitly investigate empty-market, empty-pool, share-inflation, first-depositor, and donation-based bootstrap attacks before clearing the system
+   - for lending / vault / market protocols, explicitly investigate empty-market, empty-pool, share-inflation, first-depositor, donation-based bootstrap attacks, and live-config-driven insolvency or mispricing before clearing the system
+   - for Compound / Venus / money-market forks, the final notes must state which live markets were active, which had positive collateral factor, which were paused, which used manual or unusual oracle pricing, and which retained `CF = 0` as the reason an otherwise dangerous code path was not live
    - for lending / vault / market protocols, explicitly trace every redeem / mint / borrow / repay path and prove that user deltas, global deltas, and transfer amounts stay equal under clamping, sentinel values, and dust positions before clearing the system
    - for Morpho / MetaMorpho / lending-vault style systems, explicitly investigate allocator/curator misrouting, downstream market emptiness, oracle/collateral weakness, cap misconfiguration, withdrawal liquidity starvation, and ERC4626/share-bootstrap risks before clearing the system
    - the final notes for Morpho / MetaMorpho style systems must say which of these were checked and under what conditions they would become live: empty-market attack, bad curation/cap attack, oracle/collateral attack, withdrawal-liquidity starvation, share-bootstrap/donation inflation, fork-with-minimal-diff inheritance
@@ -827,6 +857,19 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - if crossed, what exact branch executes and who receives value?
    - can the resulting move be sandwiched, backrun, or otherwise monetized?
    - if value is redirected to a non-attacker sink, can induced price movement still be monetized separately?
+   - if the token flow hands assets into staking / dividend / proof / vault / rewards / mining / helper contracts, can those contracts be abused to turn a nominal sink into attacker-owned value?
+
+   **Token dependency stop rule is mandatory**:
+   - If a token audit reveals unresolved external contracts on the live value path, you must stop and mark coverage incomplete instead of finalizing on the token alone.
+   - This includes any external contract that:
+     - receives protocol tokens or quote assets during transfers or maintenance branches
+     - can mint, burn, lock, unlock, stake, restake, claim, settle, recycle, or redistribute value
+     - emits role/level/reward/claim/settlement events tied to attacker-visible value flow
+     - appears repeatedly in live exploit or suspicious transactions touching the token
+   - A token bundle may only be finalized as complete when those live dependencies are either:
+     - analyzed directly from local source
+     - analyzed from verified explorer source / decompiled source with clear evidence notes
+     - or proven irrelevant to every public value-moving path
 
    **Dead vs dormant distinction is mandatory**:
    - `Dead`: unreachable under allowed live state or impossible relative to supply/reserve bounds
@@ -850,15 +893,17 @@ Before report formatting, perform a **Critical Surface Completion Review**:
    - No deployer-intent reasoning — evaluate what the code _allows_, not how the deployer _might_ use it.
    - If source-level exploit reconstruction is complete and no concrete code-level refutation survives, do not leave the issue as a dependency-only LEAD merely because some supporting dependencies were fetched from explorers rather than the local repo.
    - If a public pair-burn / reserve-destruction path remains unresolved after source reconstruction, do not finalize the audit as complete; either complete the economics and trigger analysis or explicitly mark the audit incomplete on that family.
+   - If an issue is `Public Exploitable` on a live or plausibly live path, a `LEAD` is acceptable only when it is clearly not yet final judgment and the report explicitly states the exact missing profitability-closure work. In that case the overall audit status for that exploit family must be `Coverage unresolved / audit incomplete`, not silently finalized as if attacker-profit was settled.
+   - For live public-profit candidates, every surviving non-finding verdict must carry a quantified blocker. Examples: manipulation cost `>` extractable value, round-trip slippage removes margin, reward bucket too small, resale depth too thin, flashloan fee + taxes exceed payout, or live config disables the last conversion step. Qualitative blocker language alone is not enough.
 
 4. **Fix verification** (confidence ≥ 80 only): trace the attack with fix applied; verify no new DoS, reentrancy, or broken invariants (use `safeTransfer` not `require(token.transfer(...))`); list all locations if the pattern repeats. If no safe fix exists, omit it with a note.
 
 5. **Attacker profitability conclusion is mandatory.** Before formatting the report, add one final conclusion that answers whether a **non-owner / unprivileged attacker** has a confirmed profitable path.
    - `Yes` only if at least one final finding survives all gates with a complete profitable exploit path for an unprivileged actor.
    - `No` if no surviving finding proves profitable attacker extraction or profit, even if there are confirmed honeypots, griefing, DoS, or owner-only abuse paths.
-   - `Inconclusive` if the strongest remaining item is a LEAD or a demoted finding where profitability could not be completed end-to-end.
+   - `Inconclusive` only if the audit is explicitly marked `Coverage unresolved / audit incomplete` for the strongest live public-profit candidate and the missing profitability-closure work is stated concretely.
    - Keep the conclusion focused on attacker profit, not generic protocol risk.
-   - If `Yes`, cite the finding number(s). If `Inconclusive`, cite the lead title(s) that block certainty.
+   - If `Yes`, cite the finding number(s). If `Inconclusive`, cite the candidate title(s) and the exact unresolved blocker(s).
 
 6. **Per-finding status line is mandatory.** Each final finding or lead must internally resolve these flags before report formatting:
    - `Code bug:` Yes / No
