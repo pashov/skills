@@ -98,6 +98,27 @@ Important artifact-quality rule:
 - Reserve `bytecode-only artifact present` for raw runtime / creation bytecode or artifacts without recoverable logic structure.
 - When a decompiled artifact is used for critical-path reasoning, say so explicitly and note any remaining confidence loss versus verified source.
 
+### Bytecode-folder handling rule (MANDATORY)
+
+If any folder under the target root is named `bytecode/`, `decompiled/`, or otherwise clearly stores recovered runtime artifacts, you MUST do all of the following before claiming coverage is complete:
+
+1. explicitly enumerate the files in that folder tree, not just the folder name
+2. directly inspect representative files from each distinct artifact family in that folder
+3. decide for each inspected file whether it is:
+   - raw bytecode / selector-only
+   - readable decompiled source
+   - duplicate mirror of already-verified source
+   - a live dependency sidecar that matters for value-path closure
+4. record that judgment in the report or supporting evidence artifacts, not only in scratch reasoning
+
+Minimum evidence requirement when a `bytecode/` folder exists:
+- say explicitly that the `bytecode/` folder was checked directly
+- name at least one concrete file path or contract address from that folder that was inspected
+- if the folder was judged irrelevant, state why
+- if the folder contains decompiled logic on a live value path, say so explicitly instead of silently folding it into “source reviewed”
+
+It is not enough to say “artifact closure was done” while only reading verified Solidity under `source/` or `contracts/`. A present `bytecode/` folder creates an affirmative obligation to inspect and classify its contents.
+
 ### Mandatory upgrade when a live exploit transaction is supplied
 
 If the user provides a concrete exploit transaction hash, explorer link, trace, or step-by-step live RCA for the same target, that artifact stops being "nice to have" context and becomes **mandatory corroboration work before finalizing severity, confidence, and live status**.
@@ -322,6 +343,7 @@ Before bundling, expand the audit scope and write a hotspot checklist:
          - analyzed directly
          - grouped into an irrelevant family with explicit reason
          - left as ABI-only / bytecode-only / proxy-only and whether that blocks any live value path
+         - if a `bytecode/` or `decompiled/` tree exists, name at least one inspected concrete artifact path per family and whether it was raw bytecode, readable decompiled logic, duplicate mirror, or live dependency sidecar
        - if a dependency remains unresolved and it is part of a value-moving or price-setting path, mark the audit as incomplete and do not present the result as full coverage
        - if a bundle-local artifact remains unclassified, mark the audit as incomplete and do not present the result as full coverage
        - treat low-level `call`, `delegatecall`, selector-only calls, and decompiled external references as mandatory coupling evidence, not optional context

@@ -47,6 +47,12 @@ Minimum closure rule:
 - if any runtime-relevant artifact remains unclassified, x-ray is incomplete
 - if any sibling runtime folder exists under the target root (`bytecode/`, `abi/`, `decompiled/`, `related-contracts/`, `manifests/`, etc.), x-ray must say so explicitly in the output even if the family is later judged irrelevant
 
+Additional bytecode-folder requirement:
+- if a `bytecode/` or `decompiled/` folder exists, x-ray must say that it was checked directly
+- x-ray must name at least one concrete inspected artifact from that folder in `x-ray.md`, `architecture.json`, or supporting notes
+- if the folder was only inventoried but not opened, x-ray is incomplete
+- if inspected artifacts are readable decompiled logic or live dependency sidecars, x-ray must say so explicitly rather than collapsing them into generic “artifact closure”
+
 ## Progress tracking (MANDATORY)
 
 Before doing anything else, call TodoWrite with these 3 todos (all `pending`):
@@ -86,6 +92,8 @@ mkdir -p [project-root]/x-ray && bash $SKILL_DIR/scripts/enumerate.sh [project-r
 - `decompiled/**/*`
 
 This inventory is mandatory input to architecture closure, not optional enrichment.
+
+When `bytecode/**/*` or `decompiled/**/*` exists, Step 1 must leave you with concrete inspected examples to carry into Step 2/3. Do not stop at counts or folder names.
 
 You must treat this inventory as **whole-scope folder inventory**, not a side note. Before moving to Step 2, you must know:
 - which artifact families exist anywhere under the target root
