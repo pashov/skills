@@ -2,12 +2,13 @@
 
 Every finding passes four sequential gates. Fail any gate → **rejected** or **demoted** to lead. Later gates are not evaluated for failed findings.
 
-## Gate 1 — Refutation
+You are not defending the code. The job of these gates is to verify the attacker's claimed exploit actually fires end-to-end — anything that interrupts the attack between the attacker's call and the harm means the agent's claim does not execute, and only then does it fail to qualify as a finding.
 
-Construct the strongest argument that the finding is wrong. Find the guard, check, or constraint that kills the attack — quote the exact line and trace how it blocks the claimed step.
+## Gate 1 — Attack execution
 
-- Concrete refutation (specific guard blocks exact claimed step) → **REJECTED** (or **DEMOTE** if code smell remains)
-- Speculative refutation ("probably wouldn't happen") → **clears**, continue
+Trace the agent's claimed attack path from caller to harm. Read every guard, check, modifier, and constraint that sits on that path. Confirm that none of them interrupts the attack before the exploit step fires.
+- A specific guard / check / modifier on the attack path interrupts the claimed exploit step before harm occurs (quote the exact line and trace it) → **REJECTED** (or **DEMOTE** if a related code smell remains)
+- The supposed interruption is speculative ("probably wouldn't happen", "the caller would notice", "the deployer would set X") → **clears**, continue
 
 ## Gate 2 — Reachability
 
@@ -22,8 +23,16 @@ Prove the vulnerable state exists in a live deployment.
 Prove an unprivileged actor executes the attack.
 
 - Only trusted roles can trigger → **DEMOTE**
-- Costs exceed extraction → **REJECTED**
 - Unprivileged actor triggers profitably → **clears**, continue
+
+**Admin-action findings — reject unless an unprivileged amplifier is named.** This applies ONLY to actions performed by admin/owner, NOT to unprivileged attacker actions. If the harm requires the admin acting maliciously or against documented intent, **REJECT** — do not even emit as a LEAD (stricter than the DEMOTE above). The finding clears only when the body names a concrete unprivileged amplifier:
+
+- **race** — admin sets X mid-flow; an unprivileged user exploits the window before the update propagates.
+- **retroactive sweep** — an admin update rewrites a pending value already credited.
+- **asymmetric formula** — admin output chains into a formula an unprivileged actor profits from.
+- **access gap** — missing guard, tautological auth, or missing init guard (the access mechanism itself is the bug).
+
+No amplifier named → **REJECTED**. Amplifier named → judge it on that unprivileged path.
 
 ## Gate 4 — Impact
 

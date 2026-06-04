@@ -21,6 +21,14 @@ Extract every relationship that must hold:
 - **Abuse boundaries.** Zero balance, max capacity, first/last participant, empty state — find where invariants degenerate.
 - **Bypass cap enforcement.** Enumerate ALL paths modifying a capped value — settlement, fee accrual, emergency mode, admin ops. Find the path that skips the check.
 - **Exploit emergency transitions.** Break invariants during transition into or out of emergency mode. Find value stranded by incomplete cleanup.
+- **Use stale cached state after coupled mutation.** A function caches `state.x`, calls a mutator that writes `state.x`, then uses the cached pre-mutation value. Enumerate every cache-then-mutate-then-use chain; the cache must be invalidated or re-read after the mutator.
+- **Reset timers via secondary call paths.** A function unconditionally updates a timestamp (`asset.timestamp = block.timestamp`, `lastClaim`) that an adversary uses to repeatedly reset a window (JIT, cooldown, lockup). Find every `updateTimestamp` call not gated by an explicit branch.
+- **Mutate global parameters during in-flight operations.** Multi-block operations (lottery draws, vault deposits, swap settlements) assume constant parameters. Find every setter callable while a draw/settle/multistep is ACTIVE; settlement reads current values, not values captured at start.
+- **Diverge view from write.** `queryX` returns one value; `doX` with the same inputs writes a different value because a penalty/fee/accrual/cascade is omitted from the view. Enumerate every view/write pair; the bodies' math must match modulo state mutation.
+- **Break peg invariant during partial mint.** Stablecoin or pegged-share mints that partially fail leave a portion of supply un-collateralized; the peg invariant `supply ≤ backing` quietly breaks until the next full mint cycle.
+- **Strand value across emergency transitions.** Emergency mode pauses normal flows but the cleanup path doesn't sweep accumulated rewards/earnings; value generated in emergency is permanently stuck. Find every emergency-pause that lacks a paired cleanup.
+- **Bypass capacity caps on secondary mutation paths.** A `<= cap` check enforced on `deposit()` is skipped on settlement, fee accrual, or LP-earnings addition; the cap can be exceeded silently. Enumerate every path that increments the capped value.
+- **Couple state-price reads across mutating paths.** Liquidation reads price and balance at different points in the same transaction; price moves between the reads (oracle update, swap, hook) and the liquidation pays the wrong amount.
 
 ## Step 3 — Construct the exploit
 
