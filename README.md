@@ -21,6 +21,7 @@ Install https://github.com/pashov/skills/ and run solidity auditor with all diff
 ```
 run an x-ray on the codebase
 run the solidity auditor with all the different agents possible on *specified files*
+generate a fuzz suite for this codebase with ai-fuzzing
 ```
 
 ```
@@ -33,8 +34,9 @@ update skills to latest version
 
 | Skill                                 | Description                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------- |
-| [solidity-auditor](solidity-auditor/) | Fast (typically <5 min) security feedback on Solidity changes while you develop |
-| [x-ray](x-ray/)                       | Pre-audit scan with threat model, invariants, entry points, and git analysis    |
+| [solidity-auditor](solidity-auditor/) | Fast (typically <5 min) security feedback on Solidity changes while you develop                  |
+| [x-ray](x-ray/)                       | Pre-audit scan with threat model, invariants, entry points, and git analysis                    |
+| [ai-fuzzing](ai-fuzzing/)             | Generate stateful Echidna/Medusa fuzz suites from Foundry/Hardhat projects (bundles `fuzz-convert` + `fuzz-sync`) |
 
 ---
 
