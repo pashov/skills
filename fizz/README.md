@@ -7,8 +7,6 @@ Built for:
 - **Solidity devs** who know they should fuzz but don't have weeks to set it up
 - **Security researchers** who want a full suite generated in minutes, not days
 
-Not a replacement for a hand-written suite — just the fastest way to go from nothing to real test coverage.
-
 ## What You Get
 
 One command produces:
