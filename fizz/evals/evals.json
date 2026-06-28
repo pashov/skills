@@ -1,0 +1,21 @@
+{
+  "skill_name": "fizz",
+  "evals": [
+    {
+      "id": 0,
+      "name": "full-run",
+      "prompt": "Generate a fuzz suite for the project at /Users/tejaswarambhe/Documents/GitHub/test-fuzzing-target",
+      "expected_output": "A complete fuzz suite under test/fizz/ with handlers, properties, and a passing Medusa campaign",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 1,
+      "name": "targeted-no-invariants",
+      "prompt": "Generate fuzz handlers for the Vault and StakingRewards contracts in /Users/tejaswarambhe/Documents/GitHub/test-fuzzing-target, skip invariants",
+      "expected_output": "Handlers for Vault and StakingRewards under test/fizz/handlers/, no properties generated, Medusa coverage run completed",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}
