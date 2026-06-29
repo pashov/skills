@@ -1,0 +1,18 @@
+testMode: "assertion"
+prefix: "property_"
+seqLen: 100
+testLimit: 50000
+balanceContract: 0xffffffffffffffffffffffffffffffffffffffffffffffff
+coverage: true
+corpusDir: "fizz_data/corpus_echidna"
+cryticArgs: ["--foundry-compile-all"]
+contractAddr: "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496"
+deployer: "0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38"
+# output format (comment out for TUI)
+format: "text"
+# Hide solc stderr output and additional information during the testing.
+quiet: false
+stopOnFail: false
+disableSlither: false
+
+# https://secure-contracts.com/program-analysis/echidna/configuration.html

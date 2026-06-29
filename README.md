@@ -16,11 +16,13 @@
 ```
 Install https://github.com/pashov/skills/ and run an x-ray on the codebase
 Install https://github.com/pashov/skills/ and run solidity auditor with all different agents possible on the codebase
+Install https://github.com/pashov/skills/ and run fizz on the codebase
 ```
 
 ```
 run an x-ray on the codebase
 run the solidity auditor with all the different agents possible on *specified files*
+run fizz on the codebase
 ```
 
 ```
@@ -33,6 +35,7 @@ update skills to latest version
 
 | Skill                                 | Description                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------- |
+| [fizz](fizz/)                         | Generate a full Echidna/Medusa fuzz suite for any Foundry or Hardhat project    |
 | [solidity-auditor](solidity-auditor/) | Fast (typically <5 min) security feedback on Solidity changes while you develop |
 | [x-ray](x-ray/)                       | Pre-audit scan with threat model, invariants, entry points, and git analysis    |
 
