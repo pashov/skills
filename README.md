@@ -31,6 +31,28 @@ update skills to latest version
 
 ---
 
+## Install via `npx skills`
+
+[`skills`](https://github.com/vercel-labs/skills) is a CLI that installs agent skills straight from GitHub — no clone, no config.
+
+```bash
+# Interactive: pick which skills to install into the current project
+npx skills add pashov/skills
+
+# See what's available first
+npx skills add pashov/skills --list
+
+# Install specific skills
+npx skills add pashov/skills --skill x-ray --skill solidity-auditor
+
+# Install everything, non-interactively, into Claude Code globally (CI-friendly)
+npx skills add pashov/skills -g -a claude-code -y
+```
+
+`-a` targets a specific agent (`claude-code`, `cursor`, `codex`, `opencode`, …). Update later with `npx skills update`.
+
+---
+
 ## Skills
 
 | Skill                                 | Description                                                                     |
