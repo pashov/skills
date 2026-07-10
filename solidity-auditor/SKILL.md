@@ -27,8 +27,28 @@ c. ToolSearch `select:Agent`
 d. Read the local `VERSION` file from the same directory as this skill
 e. Bash `curl -sf https://raw.githubusercontent.com/pashov/skills/main/solidity-auditor/VERSION`
 f. Bash `mktemp -d ./.audit-XXXXXX` → store as `{bundle_dir}`
+g. **Prior-audit discovery** — Bash `find` for prior audit reports in the project, excluding `lib/`, `node_modules/`, `.git/`. Search common locations and patterns:
+
+```
+find . -type f \( -iname "*.pdf" -o -iname "*.md" \) \
+  \( -ipath "*/audit*/*" -o -ipath "*/reports/*" -o -ipath "*/findings/*" -o -ipath "*/security/*" \
+     -o -iname "*audit*" -o -iname "*report*" -o -iname "*findings*" -o -iname "*review*" \) \
+  -not -path "./lib/*" -not -path "./node_modules/*" -not -path "./.git/*" \
+  -not -path "./.audit-*" -not -name "*-pashov-ai-audit-report-*.md" 2>/dev/null
+```
+
+Store the result as `{prior_audits}`. If non-empty, store the list and proceed; if any are PDFs, attempt `pdftotext -layout` (best-effort; skip silently if `pdftotext` isn't installed).
+
+The last two exclusions matter: this skill writes its own report into the working directory and its bundle dir under `./.audit-*`. Without them, a re-run would ingest the previous run's report as a prior audit and downgrade its own findings.
 
 If the remote VERSION fetch succeeds and differs from local, print `⚠️ You are not using the latest version. Please upgrade for best security coverage. See https://github.com/pashov/skills`. If it fails, skip silently.
+
+**If `{prior_audits}` is non-empty**, after the discovery tool calls return: in a single message, Read each prior audit report (or its extracted `.txt` if PDF). Extract per report:
+- Each finding's title + severity + status (Fixed / Acknowledged / Mitigated / Open)
+- The team's response text where present (e.g., "Sky: Acknowledged. We interpreted ...")
+- The auditor's final verdict (e.g., "Cantina Managed: Acknowledged.")
+
+Build a `{bundle_dir}/prior-audits.md` with one section per report containing this extracted index. This file will be referenced in Turn 4 gate-evaluation; it does NOT need to be inlined into agent bundles. Print a one-line summary: `Prior audits found: N (Cantina, ChainSecurity, ...) — see {bundle_dir}/prior-audits.md`.
 
 **Turn 1b — Model selection (Claude Code only).** This turn applies ONLY when both `AskUserQuestion` and the `Agent` tool (with a `model` parameter) are available in your runtime — i.e., Claude Code. On Codex, Gemini, Cursor's native agent, or any runtime without these, SKIP this turn entirely, leave `{agent_model}` unset, and proceed to Turn 2. Do NOT emit the question as prose. Do NOT substitute any other mechanism.
 
@@ -198,6 +218,14 @@ output fields are in your specialty file).
 2. **Gate.** Run each deduped finding through the four gates in `judging.md` (no skip, no reorder, no revisit after verdict).
 
    **Single-pass:** every relevant code path ONCE in fixed order (constructor → setters → swap → mint → burn → liquidate). One-line verdict: `BLOCKS` / `ALLOWS` / `IRRELEVANT` / `UNCERTAIN`. `UNCERTAIN = ALLOWS`. Commit, no re-examination.
+
+   **Prior-audit calibration (only if `{bundle_dir}/prior-audits.md` exists):** before assigning final severity, cross-reference each finding against `prior-audits.md`. For matches:
+   - **Same issue, status = Fixed** → verify the fix is actually present on the current branch (`main`, `master`, or `dev`). If present → REJECTED. If absent → keep at original severity and tag `[regression-of: <auditor> <ref>]`.
+   - **Same issue, status = Acknowledged / Mitigated / Open** → still in code by definition; keep the finding but downgrade by one severity level and tag `[also-flagged-by: <auditor> <severity>]`. The team explicitly chose not to fix; re-reporting at original severity ignores their adjudication.
+   - **Same issue described as "trust assumption" or "documented design"** → demote to LEAD or NOTE; cite the trust-model line verbatim. Do not re-elevate to FINDING unless you can show a concrete spec text or invariant the team's documented assumption violates.
+   - **Novel issue not in any prior audit** → keep at full severity.
+
+   This calibration step exists because items already adjudicated by paid auditors and accepted-as-acknowledged carry strong Bayesian evidence of bounded severity. Re-reporting them at original severity without weighing the prior adjudication is a known false-positive pattern.
 
 3. **Lead promotion / rejection.**
    - LEAD → FINDING (conf 75) if: full exploit chain in source, OR `[agents: 2+]` demoted (not rejected) same issue.
