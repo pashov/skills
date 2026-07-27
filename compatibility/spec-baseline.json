@@ -1,24 +1,24 @@
 {
   "schemaVersion": 1,
   "sourceRepository": "inferrex-ai/core-specification",
-  "reviewedRepositoryHead": "cceb180bce55632ad43399a9338b2932e713dfba",
-  "reviewedSourceCommit": "507f99a1a894d169602ce6e4d758592c458c278f",
-  "reviewedCanonicalTreeSha": "3089626148d1504e3122fa9b78ccf728a0a0775a",
+  "reviewedRepositoryHead": "d7125892b338cb2c9d7a7ef014ea8bfc462b8f8c",
+  "reviewedSourceCommit": "3ba3eb79d64b278a4a2f72d10538cb30f1c01b48",
+  "reviewedCanonicalTreeSha": "0f890b4405b2f7e2dffc9f5bb51426604fb097d0",
   "reviewedAt": "2026-07-27",
   "skills": {
     "inferrex-x-ray": {
-      "canonicalTreeSha": "3089626148d1504e3122fa9b78ccf728a0a0775a",
-      "reviewedSourceCommit": "507f99a1a894d169602ce6e4d758592c458c278f",
+      "canonicalTreeSha": "0f890b4405b2f7e2dffc9f5bb51426604fb097d0",
+      "reviewedSourceCommit": "3ba3eb79d64b278a4a2f72d10538cb30f1c01b48",
       "scope": "T0-T4 authority, stage, invariant, trust-boundary, attack-surface and evidence mapping"
     },
     "inferrex-redteam": {
-      "canonicalTreeSha": "3089626148d1504e3122fa9b78ccf728a0a0775a",
-      "reviewedSourceCommit": "507f99a1a894d169602ce6e4d758592c458c278f",
+      "canonicalTreeSha": "0f890b4405b2f7e2dffc9f5bb51426604fb097d0",
+      "reviewedSourceCommit": "3ba3eb79d64b278a4a2f72d10538cb30f1c01b48",
       "scope": "T0-T4 adversarial roles, judging, evidence independence and cross-stage seam review"
     },
     "inferrex-closure-check": {
-      "canonicalTreeSha": "3089626148d1504e3122fa9b78ccf728a0a0775a",
-      "reviewedSourceCommit": "507f99a1a894d169602ce6e4d758592c458c278f",
+      "canonicalTreeSha": "0f890b4405b2f7e2dffc9f5bb51426604fb097d0",
+      "reviewedSourceCommit": "3ba3eb79d64b278a4a2f72d10538cb30f1c01b48",
       "scope": "T0-T4 finding, source, evidence, gate-axis and stage-manifest closure"
     }
   }
