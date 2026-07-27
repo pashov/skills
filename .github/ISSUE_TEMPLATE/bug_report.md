@@ -13,8 +13,11 @@ What went wrong?
 ## Steps to Reproduce
 
 1. How you invoked the skill
-2. Input given
-3. What happened
+2. Skill name and `VERSION`
+3. Selected Inferrex stage
+4. Specification and implementation commit identities
+5. Sanitized input given
+6. What happened
 
 ## Expected Behavior
 
@@ -22,4 +25,8 @@ What you expected instead.
 
 ## Model
 
-<!-- e.g. claude-sonnet-4-6 -->
+<!-- Model/runtime and whether independent review agents were available -->
+
+## Evidence boundary
+
+<!-- Real PostgreSQL/provider/wire environment, deterministic model, or mock -->

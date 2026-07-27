@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inferrex Closure Check"
+  short_description: "Verify review and stage evidence closure"
+  default_prompt: "Use $inferrex-closure-check to verify Inferrex finding and gate evidence against exact source bytes."

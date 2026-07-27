@@ -1,3 +1,7 @@
 *.DS_Store
 .claude/
+.inferrex-review/
+.inferrex-compatibility/
+__pycache__/
+*.pyc
 **/evals/results/
