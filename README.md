@@ -1,52 +1,91 @@
-# Pashov Audit Group Skills
+# Inferrex adversarial review skills
 
-> AI-powered Solidity security skills — built by [Pashov Audit Group](https://www.pashov.com/).
+AI-assisted review workflows for the Inferrex specification and its T0–T4
+implementation stages.
 
-**Supported AI Platforms:**
-[![Claude Code](https://img.shields.io/badge/Claude_Code-F5E6D0?style=for-the-badge&logo=anthropic&logoColor=1a1a1a)](https://claude.ai/download)
-[![Cursor](https://img.shields.io/badge/Cursor-000000?style=for-the-badge&logo=cursor&logoColor=white)](https://cursor.com)
-[![Codex](https://img.shields.io/badge/Codex-000000?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBmaWxsPSJ3aGl0ZSIgZD0iTTIyLjI4MTkgOS44MjExYTUuOTg0NyA1Ljk4NDcgMCAwIDAtLjUxNTctNC45MTA4IDYuMDQ2MiA2LjA0NjIgMCAwIDAtNi41MDk4LTIuOUE2LjA2NTEgNi4wNjUxIDAgMCAwIDQuOTgwNyA0LjE4MThhNS45ODQ3IDUuOTg0NyAwIDAgMC0zLjk5NzcgMi45IDYuMDQ2MiA2LjA0NjIgMCAwIDAgLjc0MjcgNy4wOTY2IDUuOTggNS45OCAwIDAgMCAuNTExIDQuOTEwNyA2LjA1MSA2LjA1MSAwIDAgMCA2LjUxNDYgMi45MDAxQTUuOTg0NyA1Ljk4NDcgMCAwIDAgMTMuMjU5OSAyNGE2LjA1NTcgNi4wNTU3IDAgMCAwIDUuNzcxOC00LjIwNTggNS45ODk0IDUuOTg5NCAwIDAgMCAzLjk5NzctMi45MDAxIDYuMDU1NyA2LjA1NTcgMCAwIDAtLjc0NzUtNy4wNzI5em0tOS4wMjIgMTIuNjA4MWE0LjQ3NTUgNC40NzU1IDAgMCAxLTIuODc2NC0xLjA0MDhsLjE0MTktLjA4MDQgNC43NzgzLTIuNzU4MmEuNzk0OC43OTQ4IDAgMCAwIC4zOTI3LS42ODEzdi02LjczNjlsMi4wMiAxLjE2ODZhLjA3MS4wNzEgMCAwIDEgLjAzOC4wNTJ2NS41ODI2YTQuNTA0IDQuNTA0IDAgMCAxLTQuNDk0NSA0LjQ5NDR6bS05LjY2MDctNC4xMjU0YTQuNDcwOCA0LjQ3MDggMCAwIDEtLjUzNDYtMy4wMTM3bC4xNDIuMDg1MiA0Ljc4MyAyLjc1ODJhLjc3MTIuNzcxMiAwIDAgMCAuNzgwNiAwbDUuODQyOC0zLjM2ODV2Mi4zMzI0YS4wODA0LjA4MDQgMCAwIDEtLjAzMzIuMDYxNUw5Ljc0IDE5Ljk1MDJhNC40OTkyIDQuNDk5MiAwIDAgMS02LjE0MDgtMS42NDY0ek0yLjM0MDggNy44OTU2YTQuNDg1IDQuNDg1IDAgMCAxIDIuMzY1NS0xLjk3MjhWMTEuNmEuNzY2NC43NjY0IDAgMCAwIC4zODc5LjY3NjVsNS44MTQ0IDMuMzU0My0yLjAyMDEgMS4xNjg1YS4wNzU3LjA3NTcgMCAwIDEtLjA3MSAwbC00LjgzMDMtMi43ODY1QTQuNTA0IDQuNTA0IDAgMCAxIDIuMzQwOCA3Ljg3MnptMTYuNTk2MyAzLjg1NThMMTMuMTAzOCA4LjM2NCAxNS4xMTkyIDcuMmEuMDc1Ny4wNzU3IDAgMCAxIC4wNzEgMGw0LjgzMDMgMi43OTEzYTQuNDk0NCA0LjQ5NDQgMCAwIDEtLjY3NjUgOC4xMDQydi01LjY3NzJhLjc5Ljc5IDAgMCAwLS40MDctLjY2N3ptMi4wMTA3LTMuMDIzMWwtLjE0Mi0uMDg1Mi00Ljc3MzUtMi43ODE4YS43NzU5Ljc3NTkgMCAwIDAtLjc4NTQgMEw5LjQwOSA5LjIyOTdWNi44OTc0YS4wNjYyLjA2NjIgMCAwIDEgLjAyODQtLjA2MTVsNC44MzAzLTIuNzg2NmE0LjQ5OTIgNC40OTkyIDAgMCAxIDYuNjgwMiA0LjY2ek04LjMwNjUgMTIuODYzbC0yLjAyLTEuMTYzOGEuMDgwNC4wODA0IDAgMCAxLS4wMzgtLjA1NjdWNi4wNzQyYTQuNDk5MiA0LjQ5OTIgMCAwIDEgNy4zNzU3LTMuNDUzN2wtLjE0Mi4wODA1TDguNzA0IDUuNDU5YS43OTQ4Ljc5NDggMCAwIDAtLjM5MjcuNjgxM3ptMS4wOTc2LTIuMzY1NGwyLjYwMi0xLjQ5OTggMi42MDY5IDEuNDk5OHYyLjk5OTRsLTIuNTk3NCAxLjQ5OTctMi42MDY3LTEuNDk5N1oiLz48L3N2Zz4=&logoColor=white)](https://openai.com/index/introducing-codex/)
-[![GitHub Copilot](https://img.shields.io/badge/GitHub_Copilot-000000?style=for-the-badge&logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
-[![Windsurf](https://img.shields.io/badge/Windsurf-0062FF?style=for-the-badge&logo=windsurf&logoColor=white)](https://www.windsurf.com/)
+The production skills in this repository treat the canonical specification as
+the source of normative claims. They distinguish specification defects,
+implementation defects, evidence gaps, residual risks, gate state and
+deployment state instead of translating Solidity exploit heuristics into an
+off-chain system.
 
----
+## Install and run
 
-## Install, Run & Update Prompts
-
-```
-Install https://github.com/pashov/skills/ and run an x-ray on the codebase
-Install https://github.com/pashov/skills/ and run solidity auditor with all different agents possible on the codebase
-Install https://github.com/pashov/skills/ and run fizz on the codebase
+```text
+Install https://github.com/inferrex-ai/pashov-skills-inferrex and run inferrex-x-ray on the repository
+Install https://github.com/inferrex-ai/pashov-skills-inferrex and red-team Inferrex for T0 through T4
+Install https://github.com/inferrex-ai/pashov-skills-inferrex and verify Inferrex closure evidence for T0
 ```
 
-```
-run an x-ray on the codebase
-run the solidity auditor with all the different agents possible on *specified files*
-run fizz on the codebase
-```
+Each skill also accepts a narrower stage:
 
-```
-update skills to latest version
+```text
+run inferrex-x-ray --stage T3
+run inferrex-redteam --stage T1
+run inferrex-closure-check --stage T4
 ```
 
----
+## Specification evolution preflight
 
-## Skills
+Every production skill must check the current canonical
+`inferrex-ai/core-specification` source tree before beginning its normal
+workflow. The preflight compares that tree with the skill-specific reviewed
+baseline in `compatibility/spec-baseline.json`.
 
-| Skill                                 | Description                                                                     |
-| ------------------------------------- | ------------------------------------------------------------------------------- |
-| [fizz](fizz/)                         | Generate a full Echidna/Medusa fuzz suite for any Foundry or Hardhat project    |
-| [solidity-auditor](solidity-auditor/) | Solidity AI security audit - hundreds of Critical/High vulnerabilities found    |
-| [x-ray](x-ray/)                       | Pre-audit scan with threat model, invariants, entry points, and git analysis    |
+- `COMPATIBLE`: continue normally.
+- `REWRITE_REQUIRED`: stop before reviewing. Inspect the specification diff
+  for new or changed capabilities—including stitching, composition, new
+  modalities, protocol objects, endpoints, markets or stage obligations—and
+  rewrite the invoked skill's roles, references, scripts and judging rules as
+  necessary. Validate the revised skill, update only its reviewed baseline,
+  rerun the preflight, then continue.
+- `SEALED`: remove specification drift from consideration for that invocation
+  and continue normally. This status is valid only when the canonical
+  specification contains an explicit, committed and unchanged machine-readable
+  specification seal that names a gate and binds the current canonical
+  source-tree hash.
 
----
+Ordinary artifact completeness, objective validation, finding closure, user
+acceptance, gate passage and deployment activation are not specification seals.
+A stale or prose-only seal must not disable the preflight. If the check is
+missing, cannot resolve the specification, or returns an unknown result, the
+agent must not silently proceed.
 
-## Contributing · Security · License · Contact
+## Production skills
 
-We welcome improvements and fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR process.
+| Skill | Purpose |
+|---|---|
+| [inferrex-x-ray](inferrex-x-ray/) | Map normative authority, trust boundaries, stages, invariants, attack surfaces and available evidence before review |
+| [inferrex-redteam](inferrex-redteam/) | Run a multi-role adversarial review of the T0 specification and T1–T4 implementation/evidence |
+| [inferrex-closure-check](inferrex-closure-check/) | Challenge finding dispositions, evidence provenance and the independence of gate and deployment states |
 
-Report vulnerabilities via [Security Policy](SECURITY.md). This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). [MIT](LICENSE) © contributors.
+## Stage scope
 
-If you are looking to explore strategies for securing your project, reach out for a chat on [Telegram @pashovkrum](https://t.me/pashovkrum).
+| Stage | Review target |
+|---|---|
+| T0 | Protocol correctness packets, schemas, models, vectors, checkers, architecture, closure and MVI-0 constraints |
+| T1 | Protocol kernel, migrations, database roles, real-PostgreSQL enforcement and required concurrency tests |
+| T2 | Mocked MVI-0 economic loop, durable failpoints, replay and duplicate-value prevention |
+| T3 | Text Chat Completions and receipt API, streaming/output barriers and unsupported-semantics handling |
+| T4 | Seller agent, credential boundary, proof adapters and concrete provider conformance |
 
-[![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/pashovauditgroup) [![X](https://img.shields.io/badge/X-000000?logo=x&logoColor=white)](https://x.com/PashovAuditGrp) [![Telegram](https://img.shields.io/badge/Telegram-26A5E4?logo=telegram&logoColor=white)](https://t.me/pashovkrum) [![Website](https://img.shields.io/badge/Website-FF5722?logo=googlechrome&logoColor=white)](https://www.pashov.com/)
+Solidity remains relevant where an Inferrex stage actually owns chain code
+(principally later production-rail work). The original Solidity-oriented
+skills are retained, but are not part of the production Inferrex review path.
+See [unused/README.md](unused/README.md) for the inventory and restoration
+procedure.
+
+## Review standard
+
+- Cite exact artifacts, sections, identifiers and test cases.
+- Treat assertion counts as metadata, not proof.
+- Separate normative rules from implementation and independent evidence.
+- Attempt a concrete counterexample, failure schedule, mutation or bypass
+  before returning `PASS`.
+- Never infer user acceptance, gate passage or deployment activation from an
+  objective checker result.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security-sensitive defects using
+the private reporting route described in [SECURITY.md](SECURITY.md).

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inferrex X-Ray"
+  short_description: "Map T0–T4 review surfaces and evidence"
+  default_prompt: "Use $inferrex-x-ray to map the Inferrex repository before adversarial review."

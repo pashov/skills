@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inferrex Red Team"
+  short_description: "Adversarially review Inferrex T0–T4"
+  default_prompt: "Use $inferrex-redteam to challenge the Inferrex specification and implementation for T0 through T4."

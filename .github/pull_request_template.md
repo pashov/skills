@@ -19,7 +19,8 @@
 
 ## Testing
 
-Describe how you tested the skill. Paste a representative input/output pair:
+Describe the specification/implementation commits, stage, backend and
+counterexample used to test the skill.
 
 **Input:**
 ```
@@ -31,6 +32,10 @@ Describe how you tested the skill. Paste a representative input/output pair:
 
 ## Checklist
 
-- [ ] No API keys, tokens, or sensitive data included
-- [ ] No fabricated examples — outputs must reflect real model responses
-- [ ] Skill works with Claude Code CLI, VS Code, and Cursor
+- [ ] Exact artifact, invariant, finding and test identifiers are preserved
+- [ ] Normative claims, implementation facts and evidence remain distinct
+- [ ] The six gate/deployment axes cannot be conflated
+- [ ] No API keys, credentials, private evidence or customer content
+- [ ] Modified scripts were executed on representative input
+- [ ] Modified skill folders pass `quick_validate.py`
+- [ ] Any restoration from `unused/` follows its restoration procedure
