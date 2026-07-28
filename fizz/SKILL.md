@@ -59,6 +59,32 @@ Resolve once at the start of the run and reuse it for every spawn below:
 
 Every subsequent spawn instruction below references `{AGENT_MODEL}` — substitute the resolved value when making the actual tool call. Do NOT mix tiers within a single run.
 
+## Subagent Orchestration
+
+**Workflows are Claude Code only.** Every other runtime — Codex, Gemini, Cursor's native agent, Copilot, Windsurf — runs the Agent path, which is this skill's original behaviour and stays fully supported. Never emulate, shim, or hand-roll a workflow on a runtime that does not have the tool.
+
+Resolve `{ORCHESTRATION}` once, silently, at the start of the run — no user-facing output, no question, and no extra line in Step 0's resolved-values output. It only decides *how* subagents are dispatched; `{AGENT_MODEL}` still decides which model they run on, on every path. If detection needs a `ToolSearch`, batch it into the same call that fetches `AskUserQuestion` in Step 0 (`select:AskUserQuestion,Workflow`) so Step 0's output discipline is preserved.
+
+- `{ORCHESTRATION} = "workflow"` **only if** the `Workflow` tool is actually available in your runtime — its schema is loaded, or `ToolSearch` with `select:Workflow` returns it. Positive detection is required: a successful schema fetch, nothing weaker. Never infer availability from the model you are running, the presence of the `Agent` tool, or the fact that this section mentions workflows.
+- Otherwise → `{ORCHESTRATION} = "agents"`: parallel `general-purpose` Agent spawns, exactly as before.
+
+If a `Workflow` call fails at runtime for any reason (tool not found, invalid script, rejected), do not retry it — fall back to the Agent path for that step and continue. A workflow is a dispatch optimisation, never a hard dependency.
+
+Which steps this affects:
+
+| Step | Agents | `{ORCHESTRATION} = "workflow"` | `{ORCHESTRATION} = "agents"` |
+|---|---|---|---|
+| 3, Attempt 4 — Protocol Analyzer | 1 | Agent tool (unchanged) | Agent tool |
+| 9b + 9c — 5 discovery agents → Synthesizer | 6 | one `Workflow` call | 5 parallel Agent spawns, then 1 |
+| 9d — 2 implementers | 2 | one `Workflow` call | 2 parallel Agent spawns |
+| 11 — Report Writer | 1 | Agent tool (unchanged) | Agent tool |
+
+Single-agent steps stay on the Agent tool on every path — a workflow around one agent adds a layer without adding parallelism or determinism.
+
+**Opt-in**: this skill instructing you to call `Workflow` *is* the required user opt-in for multi-agent orchestration. Do not ask the user to confirm it, and do not fall back to the Agent path because the user did not say "use a workflow".
+
+**Everything else is unchanged.** The workflow paths dispatch the same prompts, built from the same agent files with the same placeholder substitutions, and write the same files. Every `{MODE} = "guided"` checkpoint still happens in the parent agent, between workflow calls — never inside a script.
+
 ## Step 0: Print Banner
 
 At the start of every skill run, **first** print this ASCII banner once before any other output — including any selection prompt:
@@ -422,9 +448,9 @@ Extract from the codebase:
 - **CONVERSION_FUNCTIONS**: grep for `convertTo*`, `preview*`, `toAssets`, `toShares`, or any function mapping between two unit systems
 - **ACCESS_CONTROL**: grep for `onlyOwner`, `onlyAdmin`, `onlyRole`, `require(msg.sender`, custom role modifiers
 
-### Step 9b: Spawn 5 Discovery Agents in Parallel
+### Step 9b: Discovery Agents
 
-**CRITICAL**: All 5 agents MUST be spawned in a SINGLE message (one tool call per agent, all in the same response).
+The 5 discovery agents:
 
 | Agent | File | Discovery Approach |
 |-------|------|-------------------|
@@ -434,17 +460,41 @@ Extract from the codebase:
 | 4. Adversarial Profit Maximizer | `{SKILL_PATH}/agents/invariant-discovery/adversarial-profit-maximizer.md` | Attacker thinking — DoS, value extraction, edge states |
 | 5. Protocol-Type Specialist | `{SKILL_PATH}/agents/invariant-discovery/protocol-type-specialist.md` | Auto-detect type, apply domain templates (vault/lending/AMM/etc.) |
 
-Read each agent file, replace `{INVARIANT_CONTEXT}` and `{FILE_PATHS}` with actual values, spawn as `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+For every path: read each agent file and replace `{INVARIANT_CONTEXT}` and `{FILE_PATHS}` with actual values to build that agent's prompt. The 5 prompts are identical across both dispatch paths.
+
+**If `{ORCHESTRATION} = "workflow"`**: do not spawn anything here. Steps 9b and 9c run as a single `Workflow` call — see Step 9c below.
+
+**If `{ORCHESTRATION} = "agents"`**: spawn all 5 as `general-purpose` agents with `model: "{AGENT_MODEL}"`. **CRITICAL**: all 5 MUST be spawned in a SINGLE message (one tool call per agent, all in the same response).
 
 ### Step 9c: Synthesize Property Plan
 
-After all 5 agents return, read the Synthesizer agent file:
+The Synthesizer agent file:
 
 | Agent | File |
 |-------|------|
 | 6. Synthesizer | `{SKILL_PATH}/agents/invariant-discovery/synthesizer.md` |
 
-Replace `{AGENT_OUTPUTS}` with the outputs from agents 1-5, `{META_DIR}` with the actual `{META_DIR}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path, then spawn as `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+Read it and replace `{META_DIR}` with the actual `{META_DIR}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path. `{AGENT_OUTPUTS}` is filled with the combined output of agents 1–5.
+
+**If `{ORCHESTRATION} = "agents"`**: after all 5 discovery agents return, substitute `{AGENT_OUTPUTS}` with their outputs and spawn the Synthesizer as a `general-purpose` agent with `model: "{AGENT_MODEL}"`.
+
+**If `{ORCHESTRATION} = "workflow"`**: issue ONE `Workflow` call covering Steps 9b and 9c. Pass `scriptPath` (see below) and `args` as a JSON object — an actual object, never a JSON-encoded string — with:
+
+- `agentModel` — the resolved `{AGENT_MODEL}` (`"sonnet"` or `"opus"`)
+- `discovery` — 5 entries `{label, prompt}`, where `label` is the agent's short name (`conservation-auditor`, `roundtrip-rounding-analyst`, `state-transition-mapper`, `adversarial-profit-maximizer`, `protocol-type-specialist`) and `prompt` is that agent's fully substituted prompt from Step 9b
+- `synthesizer` — the Synthesizer prompt with `{META_DIR}` / `{PROJECT_ROOT}` / `{SUITE_DIR}` already substituted and `{AGENT_OUTPUTS}` left as a literal placeholder
+
+The script ships with this skill at `{SKILL_PATH}/workflows/invariant-discovery.js` — pass it to `Workflow` as `scriptPath`. Do NOT paste it inline as `script`; the file on disk is the single source of truth.
+
+Notes on this script, all load-bearing:
+
+- The `typeof args === 'string'` guard is REQUIRED, not defensive padding. Some runtimes hand the script `args` already JSON-encoded. Destructuring a string does not throw — every field silently becomes `undefined`, and the run dies on `discovery.map` with `undefined is not an object` before a single agent spawns. Keep the guard on both scripts in this skill.
+- `parallel` is a barrier on purpose. The Synthesizer's whole job is cross-agent merge and dedup, so it genuinely needs all 5 outputs at once — this is the case where a barrier beats a pipeline.
+- `model: agentModel` is set on every `agent()` call, so `{AGENT_MODEL}` (including `--max` / `--opus`) reaches the discovery agents and the Synthesizer alike. Never mix tiers within a run.
+- `{AGENT_OUTPUTS}` substitution uses `split`/`join`, not `String.replace`, so `$&`-style sequences in agent output can't corrupt the Synthesizer prompt.
+- A `null` entry in `found` means that discovery agent was skipped or died after retries. The Synthesizer sees `(agent returned nothing)` for it; report that lens as missing rather than treating its silence as "no invariants found".
+- The workflow ends at the Synthesizer. The guided-mode `PROPERTIES.md` review below happens in the parent agent, after the workflow returns.
+
 The Synthesizer merges, deduplicates, prioritizes, and writes BOTH:
 - `{PROJECT_ROOT}/{META_DIR}/property-plan.md` — implementation tables with stable Spec IDs (`GL-NN`, `SP-NN`)
 - `{PROJECT_ROOT}/PROPERTIES.md` — English-language spec with `[ ]` checkboxes, one entry per property, identified by the same Spec IDs. This is the artifact that the `/fizz-convert` command and the implementers in Step 9d operate on.
@@ -453,7 +503,7 @@ Each property carries a **Guarantee** tag set at generation time — `SHOULD-HOL
 
 Print a summary: "Generated X properties (N HIGH, N MEDIUM, N LOW; P SHOULD-HOLD, Q EXPLORATORY)" with a brief list of the top properties by priority.
 
-If `{MODE} = "guided"`, pause here: tell the user the file path (`{PROJECT_ROOT}/PROPERTIES.md`), summarise what the Synthesizer produced, and ask *"Review `PROPERTIES.md` and edit freely — rename, add, remove, or reword properties. Keep the Spec IDs (`GL-NN` / `SP-NN`) on entries you want implemented, and leave `[ ]` checkboxes unchanged. Reply 'proceed' when done, or 'regenerate' to re-run the Synthesizer with additional guidance."* If they reply `regenerate`, ask what to change, then re-spawn the Synthesizer (Step 9c) with the extra guidance appended to its input. If they reply `proceed`, continue to Step 9d. In `{MODE} = "automatic"`, skip the pause and proceed directly.
+If `{MODE} = "guided"`, pause here: tell the user the file path (`{PROJECT_ROOT}/PROPERTIES.md`), summarise what the Synthesizer produced, and ask *"Review `PROPERTIES.md` and edit freely — rename, add, remove, or reword properties. Keep the Spec IDs (`GL-NN` / `SP-NN`) on entries you want implemented, and leave `[ ]` checkboxes unchanged. Reply 'proceed' when done, or 'regenerate' to re-run the Synthesizer with additional guidance."* If they reply `regenerate`, ask what to change, then re-run the Synthesizer with the extra guidance appended to its input — as a single `general-purpose` Agent call with `model: "{AGENT_MODEL}"` on both paths, reusing the discovery output you already have (on the workflow path, the `discovery` field of the returned object). Do NOT re-run the 5 discovery agents. If they reply `proceed`, continue to Step 9d. In `{MODE} = "automatic"`, skip the pause and proceed directly.
 
 ### Step 9d: Implement Properties (2 Parallel Agents)
 
@@ -464,7 +514,15 @@ Read each agent file:
 | 7A. Global Property Implementer | `{SKILL_PATH}/agents/implementers/global-property-implementer.md` | Ghosts in Base.sol, State in Snapshots.sol, global properties in Properties.sol, harness contracts if needed |
 | 7B. Specific Property Implementer | `{SKILL_PATH}/agents/implementers/specific-property-implementer.md` | Specific properties in Properties.sol, handler wiring (ghost updates + snapshot calls + property assertions) |
 
-Replace `{META_DIR}` with the actual `{META_DIR}` path, `{SKILL_PATH}` with the actual `{SKILL_PATH}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path, then spawn both as `general-purpose` agents with `model: "{AGENT_MODEL}"` in parallel.
+For every path: replace `{META_DIR}` with the actual `{META_DIR}` path, `{SKILL_PATH}` with the actual `{SKILL_PATH}` path, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}` path, and `{SUITE_DIR}` with the actual `{SUITE_DIR}` path to build each implementer's prompt. Both prompts are identical across dispatch paths.
+
+**If `{ORCHESTRATION} = "agents"`**: spawn both as `general-purpose` agents with `model: "{AGENT_MODEL}"`, in parallel, in a single message.
+
+**If `{ORCHESTRATION} = "workflow"`**: issue ONE `Workflow` call with `scriptPath` (see below) and `args` as a JSON object — an actual object, never a JSON-encoded string — with `agentModel` (the resolved `{AGENT_MODEL}`) and `implementers` — 2 entries `{label, prompt}` with labels `global-property-implementer` and `specific-property-implementer`.
+
+The script ships with this skill at `{SKILL_PATH}/workflows/property-implementers.js` — pass it to `Workflow` as `scriptPath`. Do NOT paste it inline as `script`; the file on disk is the single source of truth.
+
+Do NOT add `isolation: 'worktree'` here. Both implementers must edit the same working tree — the specific implementer wires handlers against ghosts and snapshot fields the global implementer adds, and both flip checkboxes in the same `PROPERTIES.md`. Isolating them would split those edits across throwaway worktrees. This is the same shared-tree arrangement the Agent path has always used; Step 9e's build is what catches any collision.
 
 Both implementers MUST flip `[ ]` → `[x]` in `{PROJECT_ROOT}/PROPERTIES.md` for each property they actually implement (matching by Spec ID `GL-NN` / `SP-NN`). Properties left as TODO stubs stay `[ ]` so `/fizz-convert` can pick them up later.
 
