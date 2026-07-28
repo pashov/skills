@@ -9,6 +9,21 @@ Generate an `x-ray/` folder at the project root containing all output files. Pip
 
 `$SKILL_DIR` = the directory containing this SKILL.md file. Resolve it from the path you loaded this skill from (e.g. if this file is at `/path/to/x-ray/SKILL.md`, then `$SKILL_DIR` = `/path/to/x-ray`).
 
+## Subagent orchestration
+
+This skill spawns subagents in exactly two places, both Path B only: the Step 1 spec-doc reader and the Step 2 Tier 2 source readers. How they are dispatched depends on `$ORCHESTRATION`, resolved once, silently, before Step 1 — no user-facing output, no question.
+
+**Workflows are Claude Code only.** Every other runtime — Codex, Gemini, Cursor's native agent, Copilot, Windsurf — runs the Agent path, which is this skill's original behaviour and stays fully supported.
+
+- `$ORCHESTRATION = "workflow"` **only if** the `Workflow` tool is actually available — its schema is loaded, or `ToolSearch` with `select:Workflow` returns it. Positive detection is required: a successful schema fetch, nothing weaker. Never infer availability from the model you are running, from the presence of the `Agent` tool, or from the fact that this section mentions workflows. Never emulate or hand-roll a workflow where the tool does not exist.
+- Otherwise → `$ORCHESTRATION = "agents"`: parallel `general-purpose` Agent spawns, exactly as before.
+
+Readers run on `model: "sonnet"` on both paths — they extract facts, they do not analyze. This skill has no model selector; if you change that default, change it in one place and let both paths read it.
+
+If a `Workflow` call fails at runtime for any reason, do not retry it — fall back to the Agent path and continue. It is a dispatch optimisation, never a hard dependency.
+
+Path A never spawns anything on either path. Do not introduce a workflow where the current instructions say "direct reads — no subagent needed".
+
 ## Progress tracking (MANDATORY)
 
 Before doing anything else, call TodoWrite with these 3 todos (all `pending`):
@@ -71,7 +86,7 @@ The JSON has 7 sections: `repo_shape`, `fix_candidates`, `dangerous_area_changes
 **4. Spec/whitepaper detection** (1 Glob: `**/{whitepaper,spec,design,protocol,architecture,overview,README}*.{pdf,md}` excluding `node_modules/`, `lib/`, `x-ray/`, `test/`). Skip user-facing docs (tutorials, API refs, changelogs, contribution guides). Then apply size-aware handling:
 
 - **Path A (≤5 docs, each ≤300 lines):** Include them as Read calls in Step 2's parallel message. Direct reads — no subagent needed.
-- **Path B (>5 docs OR any doc >300 lines):** Launch a single subagent (`model: "sonnet"`) that reads ALL doc files and returns a structured extraction (max 200 lines). Subagent prompt:
+- **Path B (>5 docs OR any doc >300 lines):** Build a single **doc reader** (`model: "sonnet"`) that reads ALL doc files and returns a structured extraction (max 200 lines). Reader prompt:
   ```
   Read each doc file listed below. Extract ONLY security-relevant information into this format:
   Files: [list of doc file paths]
@@ -92,7 +107,9 @@ The JSON has 7 sections: `repo_shape`, `fix_candidates`, `dangerous_area_changes
 
   Rules: Quote the source doc for each claim. Omit sections with no relevant content. Max 200 lines total.
   ```
-  Include this subagent in Step 1's parallel message. Its output feeds Step 3 report writing.
+  Its output feeds Step 3 report writing. Where it is dispatched depends on `$ORCHESTRATION`:
+  - `"agents"`: spawn it as a subagent inside Step 1's parallel message, as before.
+  - `"workflow"`: do not spawn it here. Carry the built prompt forward — it becomes one entry in the reader list dispatched by the single `Workflow` call in Step 2 (see "Path B dispatch"). Its output is not needed before Step 3, so the one-message delay costs nothing.
 
 For both paths, extract only: doc-stated global invariants, actor definitions, cross-system flows, trust assumptions, economic properties, key design decisions. Tag all spec-derived claims in the report with `(per spec)` so auditors know what is code-verified vs spec-stated. Doc-stated global invariants feed Step 2g's NatSpec routing step — they route to §2 / §3 / §4 of `invariants.md` by shape, NOT to §1 (Enforced Guards).
 
@@ -100,7 +117,7 @@ ALL calls (coverage, git analysis, reference reads, spec glob) MUST appear in th
 
 ## Step 2: Read Source Files + Entry Point Scan (SINGLE message, ALL tool calls parallel)
 
-CRITICAL: Every tool call — Bash, Agent, Read, Grep — MUST be issued in ONE message so they run concurrently. This includes source file reads, the entry point grep scan, and any spec doc detected in Step 1 (they are all independent).
+CRITICAL: Every tool call — Bash, Agent, Workflow, Read, Grep — MUST be issued in ONE message so they run concurrently. This includes source file reads, the entry point grep scan, and any spec doc detected in Step 1 (they are all independent). On the workflow path the readers are one `Workflow` call, which still belongs in that same message.
 
 ### Scope Filtering
 - Skip interfaces: `interfaces/` dirs or filenames `I` + uppercase letter
@@ -116,7 +133,7 @@ One Read call per file. Do NOT read README, docs, or foundry.toml (already read 
 
 **Tier 1 — Small files (≤120 lines):** Batch into single Bash `cat` call.
 
-**Tier 2 — Large files (>120 lines):** Group by subsystem. Launch **one subagent per subsystem** (`model: "sonnet"`, up to 5, max ~10 files each). Subagent prompt:
+**Tier 2 — Large files (>120 lines):** Group by subsystem. Build **one reader per subsystem** (`model: "sonnet"`, up to 5, max ~10 files each), then dispatch them per "Path B dispatch" below. Reader prompt:
 ```
 Read each file listed below and return a structured summary. Do NOT analyze — just extract facts.
 Files: [list of file paths]
@@ -144,6 +161,24 @@ For EACH file, return this exact format:
   - `functionName()` — NONE — calls `ContractName.method()`
 ```
 
+### Path B dispatch
+
+Collect every Path B reader that applies to this run into one list: the Step 1 doc reader (if Step 1 took Path B) plus each Tier 2 subsystem reader. Prompts are identical on both dispatch paths — only the transport differs. Let `N` be the list length.
+
+**If `$ORCHESTRATION = "agents"`, or `N == 1`**: spawn each reader as a `general-purpose` Agent with `model: "sonnet"`, in this step's single parallel message, as before. A workflow around one agent adds a layer without adding parallelism, so `N == 1` always takes this path.
+
+**If `$ORCHESTRATION = "workflow"` and `N >= 2`**: issue ONE `Workflow` call, in this step's single parallel message alongside the Tier 1 `cat` and both grep scans. This skill instructing you to call `Workflow` is the required opt-in — do not ask the user to confirm multi-agent orchestration. Pass `scriptPath` (see below) and `args` as a JSON object — an actual object, never a JSON-encoded string — with `readers` — one entry `{label, prompt}` per reader, `label` being the subsystem name (or `spec-docs` for the Step 1 doc reader).
+
+The script ships with this skill at `$SKILL_DIR/workflows/path-b-readers.js` — pass it to `Workflow` as `scriptPath`. Do NOT paste it inline as `script`; the file on disk is the single source of truth.
+
+Notes on this script, all load-bearing:
+
+- The `typeof args === 'string'` guard is REQUIRED, not defensive padding. Some runtimes hand the script `args` already JSON-encoded. Destructuring a string does not throw — every field silently becomes `undefined`, and the run dies on `readers.map` with `undefined is not an object` before a single reader spawns.
+- `parallel` is a barrier on purpose. Step 2b onwards needs the full extraction set at once, and readers are pure fact extraction with nothing to pipeline into.
+- `model: 'sonnet'` is fixed here to match the Agent path. Readers extract facts; they do not analyze.
+- A `null` entry means that reader was skipped or died after retries. Do NOT treat a missing subsystem as "nothing found" — its files are simply unread, so either re-dispatch that one reader or read them directly before Step 2b.
+- The workflow returns in the background. Step 2b and everything downstream still gate on its output, and the grep scan below remains the hard source of truth for entry points regardless.
+
 ### Entry Point Grep Scan (INCLUDED in the same parallel message as source reads)
 
 Launch these two **Bash** calls in the SAME message as the source file reads above — they are independent and can run concurrently. Commands use **only POSIX ERE + POSIX character classes** (no `-P` / PCRE, no GNU-only escapes like `\s` `\w` `\b`), so they work identically on GNU grep (Linux/WSL), BSD grep (macOS default `/usr/bin/grep`, FreeBSD), and ripgrep:
@@ -168,7 +203,7 @@ Combine results from both. The multiline grep is critical — Solidity functions
 - `[[:space:]]`, `[[:alnum:]_]` → POSIX character classes, supported by all above
 - `--include='*.sol'` → GNU + macOS BSD grep + ripgrep. Not supported by busybox grep (niche; Alpine minimal); if the skill ever needs to run there, replace `--include='*.sol' [src]/` with `$(find [src]/ -name '*.sol')` passed as arguments.
 
-ALL tool calls (source reads/Bash/subagents, BOTH grep scans) MUST be in ONE message.
+ALL tool calls (source reads/Bash/subagents or the readers `Workflow` call, BOTH grep scans) MUST be in ONE message.
 
 Do NOT read test files or documentation files.
 
