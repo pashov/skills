@@ -9,8 +9,10 @@ A library of Claude AI skills. Each skill is a focused, self-contained capabilit
 ## Structure
 
 ```
-solidity-auditor/ # Security review of Solidity changes while you develop
-CLAUDE.md            # This file (read by Claude Code)
+solidity-auditor/  # Security review of Solidity changes while you develop
+best-practices/    # Research and apply current best practices for a stack
+latest-docs/       # Check a library's current docs against assumed/old API
+CLAUDE.md          # This file (read by Claude Code)
 ```
 
 ## Rules

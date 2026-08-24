@@ -14,25 +14,25 @@ Works with the **Claude Code CLI**, the **VS Code Claude extension**, and **Curs
 **Claude Code CLI:**
 
 ```bash
-git clone https://github.com/pashov/skills.git && mkdir -p ~/.claude/commands && cp -r skills/solidity-auditor ~/.claude/commands/solidity-auditor
+git clone https://github.com/pashov/skills.git && mkdir -p ~/.claude/commands && cp -r skills/{solidity-auditor,best-practices,latest-docs} ~/.claude/commands/
 ```
 
 **Cursor:**
 
 ```bash
-git clone https://github.com/pashov/skills.git && mkdir -p ~/.cursor/skills && cp -r skills/solidity-auditor ~/.cursor/skills/solidity-auditor
+git clone https://github.com/pashov/skills.git && mkdir -p ~/.cursor/skills && cp -r skills/{solidity-auditor,best-practices,latest-docs} ~/.cursor/skills/
 ```
 
-The skill is then invocable as `/solidity-auditor`. See the [skill README](solidity-auditor/README.md) for usage.
+Each skill is then invocable as `/solidity-auditor`, `/best-practices`, or `/latest-docs`. See the [skill README](solidity-auditor/README.md) for solidity-auditor usage.
 
 **Update to latest:** `cd` into the cloned `skills` repo and run:
 
 ```bash
 git pull
 # Claude Code CLI:
-cp -r solidity-auditor ~/.claude/commands/solidity-auditor
+cp -r solidity-auditor best-practices latest-docs ~/.claude/commands/
 # Cursor:
-cp -r solidity-auditor ~/.cursor/skills/solidity-auditor
+cp -r solidity-auditor best-practices latest-docs ~/.cursor/skills/
 ```
 
 ---
@@ -42,6 +42,8 @@ cp -r solidity-auditor ~/.cursor/skills/solidity-auditor
 | Skill                                 | Description                                                                     |
 | ------------------------------------- | ------------------------------------------------------------------------------- |
 | [solidity-auditor](solidity-auditor/) | Fast (typically <5 min) security feedback on Solidity changes while you develop |
+| [best-practices](best-practices/)     | Research current best practices/idioms for a stack, answer or review code against them |
+| [latest-docs](latest-docs/)           | Check a library's current docs against what training data or code assumes      |
 
 ---
 
