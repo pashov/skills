@@ -7,6 +7,7 @@
 - `Properties.sol`: global and function-specific invariants
 - `handlers/`: protocol actions exposed to the fuzzers
 - `harness/`: (optional) harness contracts that inherit from target contracts to expose private/internal state needed by properties
+- `symbolic/`: (optional, usually absent) `prove_*` properties run through Echidna's verification mode instead of fuzzed — see below
 - `utils/`: shared helper libraries, assertions, clamping logic, math helpers, deploy helpers, logging, and mocks
 - `FuzzTester.sol`: main Echidna/Medusa fuzzing entry point
 - `FoundryTester.sol`: Foundry harness for quick debugging and local repros
@@ -39,6 +40,20 @@ forge test --match-contract FoundryTester
 echidna . --contract FuzzTester --config echidna.yaml
 medusa fuzz --config medusa.json
 ```
+
+If `symbolic/` exists, those properties are *proved* rather than fuzzed (Echidna >= 2.4 and
+`bitwuzla` required). They run one contract at a time and are unrelated to the campaign above:
+
+```bash
+echidna test/fizz/symbolic/ProveMath.t.sol --contract ProveMath \
+        --config test/fizz/symbolic/echidna-verify.yaml --format text
+```
+
+Echidna exits non-zero under `workers: 0` — that is not a failure; read the per-method result
+lines. Only `verified` means proven: `passed` means no counterexample was found but some solver
+queries returned unknown. Every result is bounded by the harness assumptions (typically
+`uint128` inputs) and covers a single transaction, so multi-transaction behaviour is covered only
+by the fuzz campaign.
 
 ## How To Read The Suite
 

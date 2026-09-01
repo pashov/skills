@@ -147,3 +147,25 @@ These are the assertion helpers from `utils/PropertiesAsserts.sol`:
 | `lte(a, b, reason)` | `a <= b` |
 
 All have both `uint256` and `int256` overloads. All emit descriptive failure events before `assert(false)`.
+
+## 6. Which properties could be proved instead of fuzzed
+
+Ignore this section unless the optional Step 10.5 is running — it changes nothing about how you
+write properties here. It only records which of them are *candidates* for symbolic proof later.
+
+A property is a candidate when it is checkable in a **single transaction over value-typed inputs**,
+with no ghost state, no actor state, and no unbounded loops. In practice that is the
+round-trip, monotonicity, rounding-bound, and exact-identity properties over `convertTo*` /
+`preview*` / `toShares` / `toAssets`:
+
+- `convertToShares(convertToAssets(x)) <= x` — round-trip, no value creation
+- `a <= b  =>  f(a) <= f(b)` — monotonicity
+- `f_roundUp(x) - f_roundDown(x) <= 1` — rounding bound
+
+Everything that depends on ghosts, snapshots, actor balances, or a sequence of calls is
+fuzz-only — which is most of the suite, and is the point of the suite.
+
+When the Synthesizer writes a property matching the shape above, it costs nothing to note it as a
+proof candidate in `PROPERTIES.md`. Do not restructure a property to make it provable: a weaker
+property that a prover likes is worse than a strong one the fuzzer checks. See
+[symbolic-verification.md](./symbolic-verification.md) for what proving actually involves.
