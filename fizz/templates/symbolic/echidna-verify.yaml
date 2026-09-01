@@ -1,0 +1,51 @@
+# Echidna verification-mode config (symbolic execution / proofs).
+#
+# Requires Echidna >= 2.4 and `bitwuzla` on PATH. This is NOT the fuzzing config —
+# the stateful campaign keeps using ../../echidna.yaml. See
+# fizz/references/symbolic-verification.md for what these results mean.
+#
+# Run one contract at a time (echidna exits non-zero with `workers: 0`; that is
+# not a failure — read the per-method result lines):
+#
+#   echidna test/fizz/symbolic/ProveMath.t.sol --contract ProveMath \
+#           --config test/fizz/symbolic/echidna-verify.yaml --format text
+#
+# To iterate on a single property without editing this file:
+#   ... --sym-exec-target prove_<name>
+
+testMode: verification
+symExec: true
+symExecSMTSolver: bitwuzla   # strongly preferred over z3 for this workload
+
+workers: 0                   # no concrete fuzzing workers
+seqLen: 1                    # verification mode explores a single transaction
+
+# Exploration budgets. Raise in response to the worker's warnings, not preemptively:
+#   "Branches too deep at program counter"  -> symExecMaxExplore
+#   "Max Iterations Reached in contract"    -> symExecMaxIters
+#   "Result unknown by SMT solver"          -> symExecTimeout (30 -> 120 -> 300)
+symExecMaxExplore: 5000
+symExecMaxIters: 5000
+symExecTimeout: 300
+
+# Arithmetic abstraction for symbolic `a * b / c`. Default true.
+#   true  -> pure, non-mutating math over SYMBOLIC divisors (the case it exists for).
+#            A `verified` result is sound; a COUNTEREXAMPLE IS NOT — reproduce it
+#            concretely before calling it a bug.
+#   false -> storage-mutating proofs, reachability checks, and constant divisors
+#            (/1e18, /1e27), where abstraction is usually pure cost.
+# Two passes over the same harness, one line apart, is the normal workflow.
+symExecAbstractArith: true
+
+# Do not raise symExecAskSMTIters; its default of 1 is the sound setting.
+
+testMaxGas: 1000000000       # high cap so gas-heavy paths are not cut as out-of-gas
+disableSlither: false        # keep slither on (constant extraction)
+format: "text"               # show what the symbolic worker is doing
+
+# The union of every prove_* across the symbolic contracts. Matching is per-contract,
+# so one list serves every file; no-argument helpers are skipped automatically.
+# Inherited testFuzz_* are deliberately NOT listed — only the bounded prove_ wrappers
+# are verified.
+symExecTargets:
+  - prove_example_monotonic

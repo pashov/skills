@@ -69,6 +69,8 @@ function copyTemplates(src, dst, isRoot = false) {
 
         // Skip config files at root level — handled separately
         if (isRoot && (entry.name === 'echidna.yaml' || entry.name === 'medusa.json')) continue;
+        // Skip the opt-in verification-mode templates — copied only by Step 10.5
+        if (isRoot && entry.name === 'symbolic') continue;
         if (relativeSrcPath === path.join('handlers', 'Handlers.sol')) continue;
 
         if (entry.isDirectory()) {
