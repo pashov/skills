@@ -31,8 +31,8 @@ echo "=== nSLOC ==="
 sum=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
-  t=$(grep -cP '\S' "$f" || true)
-  c=$(grep -cP '^\s*(//|/\*|\*|\*/)' "$f" || true)
+  t=$(grep -cE '[^[:space:]]' "$f" || true)
+  c=$(grep -cE '^[[:space:]]*(//|/\*|\*|\*/)' "$f" || true)
   n=$((t - c))
   printf "%s: %d\n" "$f" "$n"
   sum=$((sum + n))
@@ -47,7 +47,7 @@ echo "TOTAL: $sum"
 # ─── NatSpec ──────────────────────────────────────────────────────────────────
 
 echo "=== NatSpec ==="
-grep -rcP '@notice|@dev|@param|@return' "$SRC" --include='*.sol' 2>/dev/null | wc -l
+grep -rcE '@notice|@dev|@param|@return' "$SRC" --include='*.sol' 2>/dev/null | wc -l
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -64,33 +64,33 @@ find . \( -name '*.sol' -o -name '*.js' -o -name '*.ts' -o -name '*.mjs' -o -nam
 
 echo "=== test_functions ==="
 # Foundry: `function test...` inside a test dir. Hardhat: `it(...)` / `it.only(...)` inside .js/.ts.
-SOL_TESTS=$(grep -rcP 'function test' . --include='*.sol' \
+SOL_TESTS=$(grep -rcE 'function test' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | \
-  grep -iP '/(test|tests|invariant|echidna|medusa|halmos|fuzz)/' | awk -F: '{s+=$NF}END{print s+0}')
-JS_TESTS=$(grep -rcP '^\s*it(\.(only|skip))?\s*\(' . \
+  grep -iE '/(test|tests|invariant|echidna|medusa|halmos|fuzz)/' | awk -F: '{s+=$NF}END{print s+0}')
+JS_TESTS=$(grep -rcE '^[[:space:]]*it(\.(only|skip))?[[:space:]]*\(' . \
   --include='*.js' --include='*.ts' --include='*.mjs' --include='*.cjs' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=out --exclude-dir=artifacts \
   --exclude-dir=cache --exclude-dir=dist --exclude-dir=build --exclude-dir=coverage \
   --exclude-dir=typechain --exclude-dir=typechain-types 2>/dev/null | \
-  grep -iP '/(test|tests|spec|specs)/' | awk -F: '{s+=$NF}END{print s+0}')
+  grep -iE '/(test|tests|spec|specs)/' | awk -F: '{s+=$NF}END{print s+0}')
 echo $((SOL_TESTS + JS_TESTS))
 
 # ── Stateless Fuzz (Foundry) ──
 echo "=== stateless_fuzz ==="
-grep -rcP 'function\s+testFuzz' . --include='*.sol' \
+grep -rcE 'function[[:space:]]+testFuzz' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}'
 
 # ── Stateful Fuzz: Foundry invariant tests ──
 echo "=== foundry_invariant ==="
-grep -rcP 'function\s+invariant_' . --include='*.sol' \
+grep -rcE 'function[[:space:]]+invariant_' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}'
 
 # ── Stateful Fuzz: Echidna ──
 echo "=== echidna ==="
-ECHIDNA_FUNCS=$(grep -rcP 'function\s+echidna_' . --include='*.sol' \
+ECHIDNA_FUNCS=$(grep -rcE 'function[[:space:]]+echidna_' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}')
 ECHIDNA_CONFIGS=$(find . -maxdepth 3 \( -name 'echidna.yaml' -o -name 'echidna_config.yaml' -o -name 'echidna.config.yaml' \) 2>/dev/null | wc -l)
@@ -98,7 +98,7 @@ echo "${ECHIDNA_FUNCS}:${ECHIDNA_CONFIGS}"
 
 # ── Stateful Fuzz: Medusa ──
 echo "=== medusa ==="
-MEDUSA_FUNCS=$(grep -rcP 'function\s+(property_|fuzz_)' . --include='*.sol' \
+MEDUSA_FUNCS=$(grep -rcE 'function[[:space:]]+(property_|fuzz_)' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}')
 MEDUSA_CONFIGS=$(find . -maxdepth 3 \( -name 'medusa.json' \) 2>/dev/null | wc -l)
@@ -107,14 +107,14 @@ echo "${MEDUSA_FUNCS}:${MEDUSA_CONFIGS}"
 # ── Hardhat Fuzz ──
 echo "=== hardhat_fuzz ==="
 if [ -f package.json ]; then
-  grep -cP '"@chainlink/hardhat-fuzz"|"hardhat-fuzz"|"@openzeppelin/hardhat-fuzz"' package.json 2>/dev/null || echo "0"
+  grep -cE '"@chainlink/hardhat-fuzz"|"hardhat-fuzz"|"@openzeppelin/hardhat-fuzz"' package.json 2>/dev/null || echo "0"
 else
   echo "0"
 fi
 
 # ── Fork Tests ──
 echo "=== fork ==="
-grep -rcP 'vm\.createFork|createSelectFork|hardhat_reset|FORKING_URL|forking.*url' . --include='*.sol' --include='*.ts' --include='*.js' \
+grep -rcE 'vm\.createFork|createSelectFork|hardhat_reset|FORKING_URL|forking.*url' . --include='*.sol' --include='*.ts' --include='*.js' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}'
 
@@ -127,7 +127,7 @@ echo "${CERTORA_SPECS}:${CERTORA_CONF}"
 
 # ── Formal Verification: Halmos ──
 echo "=== halmos ==="
-HALMOS_FUNCS=$(grep -rcP 'function\s+check_' . --include='*.sol' \
+HALMOS_FUNCS=$(grep -rcE 'function[[:space:]]+check_' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}')
 HALMOS_CONF=$(find . -maxdepth 3 -name 'halmos.toml' 2>/dev/null | wc -l)
@@ -135,7 +135,7 @@ echo "${HALMOS_FUNCS}:${HALMOS_CONF}"
 
 # ── Formal Verification: HEVM ──
 echo "=== hevm ==="
-grep -rcP 'function\s+prove_' . --include='*.sol' \
+grep -rcE 'function[[:space:]]+prove_' . --include='*.sol' \
   --exclude-dir=node_modules --exclude-dir=lib --exclude-dir=forge-std \
   --exclude-dir=out --exclude-dir=artifacts --exclude-dir=cache 2>/dev/null | awk -F: '{s+=$NF}END{print s+0}'
 
