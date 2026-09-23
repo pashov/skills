@@ -2,7 +2,7 @@
 
 ## Bundle contents
 
-Your bundle is four concatenated files: all in-scope source code, the SOP (HOW to think), your specialty agent (WHAT to look for), and these shared rules (output format, dedup tags, AND mandatory mental tool protocol).
+Your bundle is five concatenated files: all in-scope source code, the SOP (HOW to think), your specialty agent (WHAT to look for), these shared rules (output format, dedup tags, AND mandatory mental tool protocol), and the report language rules (HOW to word a finding).
 
 Read the whole bundle once at the start. The bundle contains all in-scope source. Use Read/Grep only for cross-file searches or out-of-scope context (interfaces/, lib/, mocks/, test/) — do not re-read in-scope files for the initial scan.
 
@@ -64,3 +64,21 @@ description: one sentence explaining trail and what remains unverified
 ```
 
 The `group_key` enables deduplication: `ContractName | functionName | bug_class`. Agents may add custom fields.
+
+## Language — MANDATORY
+
+**Your `description:` and your `fix:` sentence are written in Simplified Technical English.** The
+rules follow these ones in your bundle, under the heading "Report language". Read them, and
+obey them in every finding and every lead you emit.
+
+Your `description:` is what the report prints. Nothing downstream rewrites it into plain
+English for you — the orchestrator pastes it into the report and the report goes to the
+developer who must fix the code. One sentence, twenty-five words or fewer, active voice, no
+`-ing` clause, no metaphor. Name who acts and what they get.
+
+The rule reaches the wording and never the data. Your `bug_class` label, your `group_key`, the
+contract and function names, and every line of code you quote are written exactly as the
+source and the dedup rules require. `report-language.md` says which is which.
+
+Your `path:` and `proof:` fields are working notes, not report text. Keep them concrete;
+concrete is already plain.

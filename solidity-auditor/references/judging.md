@@ -44,7 +44,9 @@ Prove material harm to an identifiable victim.
 
 ## Confidence
 
-Start at **100**, deduct: partial attack path **-20**, bounded non-compounding impact **-15**, requires specific (but achievable) state **-10**. Confidence ≥ 80 gets description + fix. Below 80 gets description only.
+Start at **100**, deduct: partial attack path **-20**, bounded non-compounding impact **-15**, requires specific (but achievable) state **-10**. Confidence ≥ 75 gets description + fix. Below 75 gets description only.
+
+**The threshold is 75, and it is set here.** `report-formatting.md` reads it from this line and states it nowhere else. It is 75 and not 80 because the three lead-promotion rules below all land a promoted lead at exactly 75: at a threshold of 80 every cross-contract echo, every multi-agent convergence and every completed partial path would be promoted to a finding and then printed with no **Fix** block. Moving this number means moving those three, or the promotions stop being worth making.
 
 ## Safe patterns (do not flag)
 
@@ -62,7 +64,7 @@ Before finalizing leads, promote where warranted:
 
 - **Cross-contract echo.** Same root cause confirmed as FINDING in one contract → promote in every contract where the identical pattern appears.
 - **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75.
-- **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, description only.
+- **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, **description only — a deliberate exception to the threshold**. 75 clears the line, so this finding would otherwise carry a **Fix** block; it does not, because the trace it would fix was never completed. The other two promotions above take their **Fix** block normally.
 
 ## Leads
 
