@@ -25,6 +25,7 @@ Use `Echidna` and `Medusa` for invariant campaigns. Use `Foundry` for compilatio
 - `META_DIR`: `fizz_data` relative to `PROJECT_ROOT`. Pass `--meta-dir` to metadata steps.
 - Optional contract arguments narrow handler generation to specific contracts.
 - `--no-invariants` skips Step 9 only.
+- `--verify` opts in to Step 10.5 (symbolic verification of stateless math). `--no-verify` skips it without asking. Default: offered once in guided mode, skipped in automatic mode. See "Step 10.5".
 - `--max` (or `--opus`, or "max quality") upgrades every subagent in this run from Sonnet to Opus. See "Subagent Model" below.
 - `--guided` / `--automatic` selects the run mode. See "Run Mode" below.
 
@@ -32,8 +33,8 @@ Use `Echidna` and `Medusa` for invariant campaigns. Use `Foundry` for compilatio
 
 The skill runs in one of two modes, resolved once at the start of the run and reused for every checkpoint below:
 
-- `{MODE} = "guided"` — the parent agent pauses for user input at key checkpoints: Step 3 (additional docs), Step 4 (interactive function picker UI), Step 4.5 (cost confirmation), Step 6 (setup review), Step 8 (per-cycle coverage decision), Step 9c (property review), Step 10 (fuzzer choice).
-- `{MODE} = "automatic"` — the parent agent never pauses. Step 4 runs with `--auto`, Step 8 loops up to 3 coverage cycles then proceeds, Step 10 defaults to Medusa, and the cost estimate from Step 4.5 is printed but not gated on user confirmation.
+- `{MODE} = "guided"` — the parent agent pauses for user input at key checkpoints: Step 3 (additional docs), Step 4 (interactive function picker UI), Step 4.5 (cost confirmation), Step 6 (setup review), Step 8 (per-cycle coverage decision), Step 9c (property review), Step 10 (fuzzer choice), and — only when its preconditions are met — Step 10.5 (optional symbolic verification).
+- `{MODE} = "automatic"` — the parent agent never pauses. Step 4 runs with `--auto`, Step 8 loops up to 3 coverage cycles then proceeds, Step 10 defaults to Medusa, Step 10.5 is skipped unless `--verify` was passed, and the cost estimate from Step 4.5 is printed but not gated on user confirmation.
 
 ### Resolving `{MODE}`
 
@@ -80,7 +81,7 @@ After the banner, resolve `{MODE}` per the "Run Mode" section and `{AGENT_MODEL}
 
 - **Question for `{MODE}`** — `header: "Run mode"`, `question: "How should I run?"`, options:
   - `label: "Automatic (Recommended)"`, `description: "Run end-to-end with no prompts."`
-  - `label: "Guided"`, `description: "Pause at 7 checkpoints: extra docs, entry-point picker (browser UI), cost confirm, setup review, per-cycle coverage decision, property review, fuzzer choice."`
+  - `label: "Guided"`, `description: "Pause at 7 checkpoints: extra docs, entry-point picker (browser UI), cost confirm, setup review, per-cycle coverage decision, property review, fuzzer choice (plus an optional 8th: symbolic verification, only if the project qualifies)."`
 - **Question for `{AGENT_MODEL}`** — `header: "Subagent model"`, `question: "Which model should drive the subagents?"`, options:
   - `label: "Sonnet (Recommended)"`, `description: "Default. Faster and cheaper for the 5 discovery agents, synthesizer, and 2 implementers."`
   - `label: "Opus"`, `description: "Higher quality but ~10× the cost. Equivalent to passing --max / --opus."`
@@ -108,6 +109,16 @@ Run sequentially:
    Echidna install guide: `https://secure-contracts.com/program-analysis/echidna/introduction/installation.html`
 10. If `medusa --version` fails, stop here. Medusa is required before proceeding with the rest of the workflow.
 11. If `echidna --version` fails but Foundry and Medusa are installed, you may continue, but keep the installation recommendation in the user-facing summary because Echidna is still expected for the full workflow.
+12. Resolve `{SYMEXEC_AVAILABLE}` — whether the optional Step 10.5 (symbolic verification) can run at all. Both checks must pass:
+
+    ```bash
+    echidna --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 \
+      | awk -F. '{ if ($1 > 2 || ($1 == 2 && $2 >= 4)) print "echidna-symexec: available"; else print "echidna-symexec: too old (need >= 2.4)" }'
+    bitwuzla --version >/dev/null 2>&1 && echo "bitwuzla: present" || echo "bitwuzla: missing"
+    ```
+
+    Set `{SYMEXEC_AVAILABLE} = true` only when Echidna is >= 2.4 **and** bitwuzla is present. Otherwise `false`.
+13. Do **not** print anything about symbolic verification here, and do not treat either check as a blocker — Step 10.5 is optional and the fuzzing workflow does not need it. Just carry `{SYMEXEC_AVAILABLE}` forward.
 
 ## Step 2: Compile And Extract
 
@@ -529,6 +540,98 @@ If the user wants to explore further after the first campaign:
 - offer to increase the timeout or test limit
 - offer to adjust handler shapes based on coverage gaps observed during the campaign
 
+## Step 10.5: Prove Stateless Math (Optional — Echidna Verification Mode)
+
+**This step is off by default.** The fuzz suite is complete without it. It is an assurance upgrade
+on top of a clean campaign, not part of the main workflow, and it is a poor fit for most protocols.
+
+Run it **only** when all of these hold:
+
+1. `{SYMEXEC_AVAILABLE} = true` from Step 1 (Echidna >= 2.4 and bitwuzla on PATH).
+2. The user opted in — via `--verify`, or by accepting the offer below in guided mode.
+3. There are real candidates: stateless, single-transaction, value-typed math. In practice this
+   is the **CONVERSION_FUNCTIONS** set from Step 9a (`convertTo*`, `preview*`, `toAssets`,
+   `toShares`) plus the round-trip / rounding / monotonicity properties in `PROPERTIES.md`.
+
+Skip conditions — do not run, and do not push back:
+
+- `--no-verify`, or `{MODE} = "automatic"` without `--verify`.
+- `{SYMEXEC_AVAILABLE} = false`. Mention the requirement once, in one line, in the final report
+  ("symbolic verification not attempted: needs Echidna >= 2.4 + bitwuzla") and move on.
+- No stateless math candidates, or the campaign in Step 10 found violations that are still open.
+  Fix real bugs before proving anything.
+- Candidate functions take dynamic types (`bytes`, arrays, dynamic structs) or contain unbounded
+  loops — Echidna will not symbolically execute them.
+
+### The offer (guided mode only, asked at most once)
+
+If `{MODE} = "guided"` and `{SYMEXEC_AVAILABLE} = true` and candidates exist, ask **once**, with
+both sides stated:
+
+> "N conversion/preview functions here are stateless math. Echidna's verification mode can prove
+> properties about them for *every* input rather than sampling — a strictly stronger result than
+> any campaign length, against the real compiled bytecode. The costs are real: a separate
+> hand-written harness, proofs bounded to `uint128` inputs, minutes-to-hours of solver time with a
+> meaningful fraction of properties landing on `unknown`, and every result invalidated by the next
+> edit to those functions. It proves nothing about multi-transaction behaviour — that stays the
+> fuzzer's job. Run it?"
+
+If they decline, skip without further comment. Never re-ask.
+
+### Step 10.5a: Read the reference
+
+Read [symbolic-verification.md](./references/symbolic-verification.md) in full before writing any
+harness. It carries the harness patterns, the abstraction's soundness contract, the tuning table,
+and the reporting rules. Do not improvise around it.
+
+### Step 10.5b: Build the proof harness
+
+Proofs live **outside** the stateful suite, in `{SUITE_DIR}/symbolic/`. Do not point verification
+mode at `FuzzTester` — the handler/`property_*` split makes it a useless target (reference, §2).
+
+1. Copy `{SKILL_PATH}/templates/symbolic/echidna-verify.yaml` and
+   `{SKILL_PATH}/templates/symbolic/ProveMath.t.sol` into `{PROJECT_ROOT}/{SUITE_DIR}/symbolic/`.
+2. Pick **at most 10 properties** for the first pass, highest-value first: exact identities the
+   repo already tests, then monotonicity, round-trip, and rounding bounds.
+3. Write them as `prove_*` functions, preferring **Pattern A** — if the repo has a `testFuzz_*`
+   over this math, inherit its test contract and delegate to it, adding only the uniform
+   `require(x <= type(uint128).max)` bound. Otherwise use **Pattern B** relational properties.
+4. List every `prove_*` name in `symExecTargets`.
+5. `{FUZZ_BUILD_CMD}` must pass before running anything.
+
+### Step 10.5c: Run
+
+One contract at a time, as a tracked background job:
+
+```
+echidna {SUITE_DIR}/symbolic/ProveMath.t.sol --contract ProveMath --config {SUITE_DIR}/symbolic/echidna-verify.yaml --format text
+```
+
+No wrapper script — this is not a long campaign and the per-method result lines are the output.
+**Echidna exits non-zero under `workers: 0`; that is not a failure.** Read the result lines.
+
+React only to warnings the worker actually prints, using the tuning table in the reference
+(`symExecMaxExplore` / `symExecMaxIters` / `symExecTimeout`, and the
+`symExecAbstractArith` two-pass recipe). **Time-box it: at most two tuning rounds per property.**
+Anything still unresolved is out of reach — record it and move on. Do not spend the user's time
+grinding on a single stubborn proof.
+
+### Step 10.5d: Record results
+
+Write `{PROJECT_ROOT}/{META_DIR}/verification-results.md`: one row per property with its result
+(`verified` / `passed` / `failed` / `error` / `timeout`), wall-clock time, and the assumptions it
+carries. Cross-reference the Spec ID from `PROPERTIES.md` where the property came from there.
+
+Four rules, all mandatory:
+
+- **Only `verified` is proven.** `passed` means "no counterexample found, some SMT queries came
+  back unknown" — write it that way, and leave the property in the fuzz campaign.
+- **A counterexample under `symExecAbstractArith: true` is inconclusive**, not a bug. Reproduce it
+  concretely (Foundry repro or a targeted fuzz run) before reporting it as a finding.
+- **State the domain every time**: the `uint128` bound and any modelled contract in the harness.
+- **Never describe the protocol as "formally verified."** The verified unit is one property, in one
+  domain, against one build — and it expires when that code changes.
+
 ## Step 11: Validate And Report
 
 Run:
@@ -568,7 +671,7 @@ If the campaign in Step 10 found property violations, generate a Foundry reprodu
 
 After validation succeeds, spawn the Report Writer subagent to synthesize the final report. Read `{SKILL_PATH}/agents/report-writer.md`, replace `{SKILL_PATH}` with the actual `{SKILL_PATH}`, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}`, `{META_DIR}` with the actual `{META_DIR}`, and `{SUITE_DIR}` with the actual `{SUITE_DIR}`, then spawn as a `general-purpose` agent with `model: "{AGENT_MODEL}"`.
 
-The agent reads the campaign outputs (coverage, corpus, `medusa-run.log`, `PROPERTIES.md`, `Properties.sol`, handler files, open TODOs) and writes `{PROJECT_ROOT}/{META_DIR}/report.md`.
+The agent reads the campaign outputs (coverage, corpus, `medusa-run.log`, `PROPERTIES.md`, `Properties.sol`, handler files, open TODOs) and writes `{PROJECT_ROOT}/{META_DIR}/report.md`. If Step 10.5 ran, it also reads `{PROJECT_ROOT}/{META_DIR}/verification-results.md` and adds the optional Symbolic Verification section.
 
 The report-writer agent will also print the report content to the conversation (so the user sees it inline) and remind the user of the commands to run campaigns manually:
 
