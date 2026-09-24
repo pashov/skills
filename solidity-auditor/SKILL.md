@@ -50,7 +50,7 @@ The pass count the scan runs is `{passes}` — settled in Turn 1b, 1 or more. Th
 
 > **A 1-pass answer reaches none of the loop or memory machinery.** No ledger is read or written. No `Passes` or `Memory` row in the Scope table. No `seen in k/N runs`. No `KNOWN` / `NEW` tag. No per-pass summary lines. **The printed report is the report this skill printed before loop mode existed.** The only trace of the picker is the question itself.
 >
-> **What it does write.** Every scan writes `.solidity-auditor/runs/{stamp}/` — one `run-1.md`, one `scope.tsv`, one `full-report.md` — because the report is assembled from those files at every pass count, and `name`, `mode`, `files` and `threshold` are needed by every report. This paragraph used to say a 1-pass answer creates no `.solidity-auditor/` directory and no `runs/` files; that is now false, and it was never what the rule was protecting.
+> **What it does write.** Every scan writes `.solidity-auditor/runs/{stamp}/` — one `run-1.md`, one `scope.tsv`, one `queue-1.tsv`, one `full-report.md` — because the report is assembled from those files at every pass count, and `name`, `mode`, `files` and `threshold` are needed by every report. This paragraph used to say a 1-pass answer creates no `.solidity-auditor/` directory and no `runs/` files; that is now false, and it was never what the rule was protecting.
 >
 > **What the rule protects, stated exactly:** on the plain path the scan reads no ledger, writes no `mem_` key, and prints a Scope table of exactly **three** rows — `Mode`, `Files reviewed`, `Confidence threshold (1-100)` — and no `Passes` row, no `Memory` row. Disk is not printed output. A later editor who makes a **memory** step unconditional is breaking this on purpose; writing the runs directory is not one of those steps.
 >
@@ -95,63 +95,27 @@ If the remote VERSION fetch succeeds, compare the two as **numbers** and warn **
 
 > **Lower, not different.** A plain "differs" test warns the wrong person: somebody working on an unreleased version has a local `VERSION` **above** the published one, and gets told to upgrade to the version they are writing. Local equal to remote, or local above it, prints nothing.
 
-**Turn 1b — Model and pass count.** This turn asks **two questions in one `AskUserQuestion` call**: which model the 12 agents use, and how many passes the scan runs. The runner is interrupted once, before any work starts.
+**Turn 1b — Pass count.** This turn asks **one question in one `AskUserQuestion` call**: how many passes the scan runs. The runner is interrupted once, before any work starts.
 
-> **The two questions do not fail the same way.** On a runtime without `AskUserQuestion` and an `Agent` tool that takes a `model` parameter — Codex, Gemini, Cursor's native agent — the **model** question is skipped silently, `{agent_model}` is left unset, and no prose replaces it. The **pass** question is not skipped: it falls through to the printed block in Turn 1b-ii, which stops and waits. This turn as a whole is never skipped. A later editor must not restore a blanket "SKIP this turn entirely" rule: it was true when this turn asked one question, and it is false now.
+> **There is no model question, and that is deliberate.** The 12 agents run on the runtime's default model — Turn 3a omits the `model` parameter on every Agent call, so whatever model the orchestrator itself runs on is what the agents use. A later editor must not add a model picker back: it was removed on purpose, and reintroducing it would burn the runner's one interruption on a question with a safe default. The **pass** question has no safe default: on a runtime without `AskUserQuestion` it falls through to the printed block in Turn 1b-ii, which stops and waits. This turn as a whole is never skipped. A later editor must not restore a blanket "SKIP this turn entirely" rule.
 
-**Turn 1b-i — the `AskUserQuestion` call (Claude Code).** Ask both questions in one call. Where the `Agent` tool takes no `model` parameter, ask the pass question alone.
+**Turn 1b-i — the `AskUserQuestion` call (Claude Code).** Ask the pass question:
 
-Question 1 — model:
+1. Question: `"How many passes should this audit run? Each pass is a full 12-agent audit, and every pass after the first is told what the earlier ones found, so it hunts new ground. You get one combined report at the end."`
 
-1. Read your system prompt to detect your own model **family** (Opus, Sonnet, or Haiku). Ignore the version digits — the Agent tool's `model` parameter takes the family name (`"opus"` / `"sonnet"` / `"haiku"`), and the runtime resolves to the latest version in that family.
-2. Put this question in the call:
-   - Question: `"Which Claude model should the 12 audit agents use?"`
-   - Three single-select options. Mark the orchestrator's own family as `(Recommended)` and place it first.
-   - On each option, set the `description` field to `latest`.
-   - On each option, set the `preview` field verbatim (preserve all whitespace exactly — the box widths must stay equal across all three):
-
-   Opus preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  opus  ·  highest reasoning  ·  most expensive           │
-   └──────────────────────────────────────────────────────────┘
-   ```
-
-   Sonnet preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  sonnet  ·  balanced reasoning  ·  mid cost              │
-   └──────────────────────────────────────────────────────────┘
-   ```
-
-   Haiku preview:
-
-   ```
-   ┌──────────────────────────────────────────────────────────┐
-   │  haiku  ·  lowest reasoning  ·  cheapest                 │
-   └──────────────────────────────────────────────────────────┘
-   ```
-3. Store the runner's choice as `{agent_model}`. If no answer, default to the orchestrator's own model.
-
-Question 2 — pass count. It goes in the **same call**, second:
-
-4. Question: `"How many passes should this audit run? Each pass is a full 12-agent audit, and every pass after the first is told what the earlier ones found, so it hunts new ground. You get one combined report at the end."`
-
-   Three single-select options, `3 passes` first and marked `(Recommended)`. Each carries a `preview` box in this turn's style — the boxes are **60 characters wide, equal to the model picker's**, so two questions in one prompt look like one thing. Set `preview` verbatim, whitespace preserved:
+   Three single-select options, `3 passes` first and marked `(Recommended)`. Each carries a `preview` box in this turn's style — **60 characters wide**, all three equal. Set `preview` verbatim, whitespace preserved:
 
    | Label | `description` |
    | --- | --- |
-   | `3 passes (Recommended)` | `~45 min` |
-   | `1 pass` | `~15 min` |
-   | `5 passes` | `~75 min` |
+   | `3 passes (Recommended)` | `~1.5 h` |
+   | `1 pass` | `~30 min` |
+   | `5 passes` | `~2.5 h` |
 
    3 passes preview:
 
    ```
    ┌──────────────────────────────────────────────────────────┐
-   │  3 passes  ·  each pass hunts new ground  ·  ~45 min     │
+   │  3 passes  ·  each pass hunts new ground  ·  ~1.5 h      │
    └──────────────────────────────────────────────────────────┘
    ```
 
@@ -159,7 +123,7 @@ Question 2 — pass count. It goes in the **same call**, second:
 
    ```
    ┌──────────────────────────────────────────────────────────┐
-   │  1 pass  ·  today's audit  ·  ~15 min, nothing written   │
+   │  1 pass  ·  today's audit  ·  ~30 min, nothing written   │
    └──────────────────────────────────────────────────────────┘
    ```
 
@@ -167,24 +131,32 @@ Question 2 — pass count. It goes in the **same call**, second:
 
    ```
    ┌──────────────────────────────────────────────────────────┐
-   │  5 passes  ·  deepest sweep  ·  ~75 min                  │
+   │  5 passes  ·  deepest sweep  ·  ~2.5 h                   │
    └──────────────────────────────────────────────────────────┘
    ```
 
-   > **These are measured, not guessed — and they are a floor.** A real 3-pass scan of 2,228
-   > lines of Solidity across 10 files, 12 agents per pass on Opus, took **43 minutes** wall
-   > clock: 11 minutes for pass 1 and about 16 for each of passes 2 and 3, which run slower
-   > because the growing `known-findings.md` is appended to all twelve bundles. Individual
-   > agents ran 3.5–11 minutes. A larger codebase takes longer; a smaller model is faster.
-   > Quote minutes rather than multipliers — "~3x time" told the runner nothing about whether
-   > to wait or come back after lunch. If these numbers are ever re-measured, correct them
-   > here rather than adding a second estimate somewhere else.
+   > **Two clocks are in play, and only one of them is measured.** The numbers in the option
+   > previews above (`~30 min`, `~1.5 h`, `~2.5 h`) are **derived estimates for the 3-slot
+   > queue this skill now runs** — twelve agents through three slots is about four agent-times
+   > end to end, not one — and they are not measurements. The measurement below was taken with
+   > **all twelve agents running at once**, a width this skill no longer uses; read it as the
+   > per-agent speed and the floor, not as the wall clock to expect. When a real 3-slot scan
+   > completes, re-measure and correct both clocks here rather than adding a third estimate
+   > somewhere else.
+   >
+   > **The measurement, and it is a floor.** A real 3-pass scan of 2,228 lines of Solidity
+   > across 10 files, 12 agents per pass on Opus **all running at once**, took **43 minutes**
+   > wall clock: 11 minutes for pass 1 and about 16 for each of passes 2 and 3, which run
+   > slower because the growing `known-findings.md` is appended to all twelve bundles.
+   > Individual agents ran 3.5–11 minutes. A larger codebase takes longer; a smaller model is
+   > faster. Quote minutes rather than multipliers — "~3x time" told the runner nothing about
+   > whether to wait or come back after lunch.
 
-5. **Any other number needs no option of its own.** `AskUserQuestion` always adds an **Other** choice with a free-text box, and the runner types their number there. Do NOT add a fourth option reading "your own number" — options are fixed choices, so it could not collect the number and would dead-end.
+2. **Any other number needs no option of its own.** `AskUserQuestion` always adds an **Other** choice with a free-text box, and the runner types their number there. Do NOT add a fourth option reading "your own number" — options are fixed choices, so it could not collect the number and would dead-end.
 
    Parse the Other answer for the first integer. Below 1 or above 10 → ask once more. A second unusable answer → **1 pass**.
 
-6. Store the answer as `{passes}`. No answer at all → 1 pass.
+3. Store the answer as `{passes}`. No answer at all → 1 pass.
 
 **Turn 1b-ii — the printed fallback (every runtime without `AskUserQuestion`).** Print this exactly:
 
@@ -194,18 +166,18 @@ How many passes should this audit run?
 Each pass is a full 12-agent audit. Every pass after the first is told what the
 earlier passes found, so it hunts new ground. You get one combined report at the end.
 
-  1) 1 pass    — today's audit, about 15 minutes. Nothing is written to disk.
-  2) 3 passes  — recommended. About 45 minutes.
-  3) 5 passes  — deepest sweep. About 75 minutes.
+  1) 1 pass    — today's audit, about 30 minutes. Nothing is written to disk.
+  2) 3 passes  — recommended. About 1.5 hours.
+  3) 5 passes  — deepest sweep. About 2.5 hours.
 
 Answer with 1, 2, 3, or any pass count you want.
 ```
 
 > **STOP here and wait for the runner's answer.** Do NOT choose for them. Do NOT continue to Turn 2 with an assumed pass count. Do NOT start the scan and ask later.
 >
-> This is the one place in this skill where a question is emitted as prose. Turn 1b forbids prose questions because the model picker has a safe default — the orchestrator's own model. A pass count has no safe default: 1 and 5 differ by 5x in time and in cost, and that is the runner's money. A later editor must not "fix" this by deleting the prose block or by picking a default. If you are reading this and it looks like an inconsistency, it is deliberate.
+> This is the one place in this skill where a question is emitted as prose. Turn 1b forbids prose questions elsewhere; the pass count earns the exception because it has no safe default: 1 and 5 differ by 5x in time and in cost, and that is the runner's money. A later editor must not "fix" this by deleting the prose block or by picking a default. If you are reading this and it looks like an inconsistency, it is deliberate.
 
-Answers `1`, `2` and `3` are the three listed choices; any other integer is that many passes. Apply the same bounds as Turn 1b-i step 5 — below 1 or above 10, ask once more, then 1 pass.
+Answers `1`, `2` and `3` are the three listed choices; any other integer is that many passes. Apply the same bounds as Turn 1b-i step 2 — below 1 or above 10, ask once more, then 1 pass.
 
 **Turn 1b-iii — when the runner already said.** Ask nothing that has already been answered:
 
@@ -217,7 +189,7 @@ Answers `1`, `2` and `3` are the three listed choices; any other integer is that
 | "loop mode", "run it a few times" — a request with no number | **Ask.** They asked for the feature, not for a count. |
 | Nothing | Ask. |
 
-Skipping is silent in the first three rows — printing `using 5 passes` back at somebody who just typed `--loop 5` is noise. Skipping the pass question never skips the model question, and the reverse holds too.
+Skipping is silent in the first three rows — printing `using 5 passes` back at somebody who just typed `--loop 5` is noise.
 
 **Turn 1b-iv — record the pass count.** However `{passes}` was settled — asked, typed in the prose fallback, or read off a flag — write it once, here:
 
@@ -402,7 +374,27 @@ passing memory down a loop; the command does not change, only the file it is poi
 
 Print line counts for every bundle and `source.md`. Do NOT inline source code into the Agent call prompt itself.
 
-**Turn 3a — Spawn all 12 agents.** Runs **every pass**. In one message, spawn all 12 agents as **parallel BACKGROUND Agent calls** (`run_in_background=true`). If Turn 1b set `{agent_model}`, pass `model={agent_model}` on every Agent call. If `{agent_model}` is unset (Turn 1b skipped — Codex, Gemini, others), omit the `model` parameter entirely — do NOT substitute any default. The orchestrator will receive a notification when each agent completes — do NOT poll or sleep. Single phase, no later spawns. Proceed to Turn 3b only after all 12 have notified completion.
+**Turn 3a — Open the queue, launch the first three.** Runs **every pass**. The 12 agents are a **queue in agent-number order** run through **3 slots**: never more than 3 agents RUNNING at once, and never an idle slot while a PENDING agent remains. This turn opens the window; Turn 3b keeps it full.
+
+1. **Initialize the queue file** — one line per agent, in one Bash command:
+
+   ```bash
+   for i in $(seq 1 12); do printf 'agent-%d\tPENDING\n' "$i"; done \
+     > .solidity-auditor/runs/{stamp}/queue-{K}.tsv
+   ```
+
+   A line's state is `PENDING` → `RUNNING` → `COMPLETED` or `FAILED`. The last two are **terminal** — nothing leaves them, not even a FAILED line.
+
+2. **Every state change is one command** — substitute the agent number and the new state:
+
+   ```bash
+   awk -F'\t' -v OFS='\t' -v a="agent-3" -v s="RUNNING" '$1==a{$2=s}1' \
+     .solidity-auditor/runs/{stamp}/queue-{K}.tsv > .solidity-auditor/runs/{stamp}/queue-{K}.tsv.tmp \
+     && mv .solidity-auditor/runs/{stamp}/queue-{K}.tsv.tmp .solidity-auditor/runs/{stamp}/queue-{K}.tsv
+   ```
+
+3. **Launch agents 1, 2 and 3** in one message as **parallel BACKGROUND Agent calls** (`run_in_background=true`), and mark their three lines `RUNNING`. **Omit the `model` parameter on every Agent call, always** — each agent runs on the runtime's default model, the model the orchestrator itself runs on. Do NOT substitute any value, in any mode, on any runtime.
+4. Do NOT poll or sleep. The orchestrator is notified as each agent completes; Turn 3b's refill rules do the rest.
 
 Agents 1–9 use the **single-specialty prompt** (Turn 3a-i). Agents 10–12 use the **gap-hunter prompt** (Turn 3a-ii).
 
@@ -415,11 +407,16 @@ Two rules that file carries, repeated here because they are conditions and not t
 - The **"Known findings"** paragraph is included **only when memory is on and `known-findings.md` was appended**. On a plain scan the prompt is byte-identical to the one it has always been — a paragraph about a section that is not there would send agents hunting for it.
 - The **READ-ONLY** paragraph is **unconditional** — every agent, every mode, every pass. A real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference.
 
-**Turn 3b — Wait for all 12 agents to complete.** Runs **every pass**. Once every one of the 12 spawned agents has notified completion, proceed to Turn 4. Do NOT proceed to dedup until every agent has finished — let them run to natural completion. Do NOT poll or sleep; act only on completion notifications.
+**Turn 3b — Sustain the three slots until the queue is done.** Runs **every pass**. A completion notification is not just news — it is a slot opening. Act on it in the message that carries it:
+
+1. **Mark the finished agent terminal** — `COMPLETED` for a normal finish, `FAILED` for a death — with the command from Turn 3a step 2.
+2. **Refill immediately.** While fewer than 3 lines read `RUNNING` and a line still reads `PENDING`, launch the next `PENDING` agent — lowest number first — as a BACKGROUND Agent call (`model` omitted, as always) and mark it `RUNNING`, **in the same message** as the notification. Several notifications arriving together refill several slots in one message. Never a 4th agent while 3 are RUNNING; never an idle slot while a PENDING agent remains.
+3. **The pass ends when all 12 lines are terminal** — `COMPLETED` or `FAILED`, nothing `PENDING`, nothing `RUNNING`. Only then proceed to Turn 4. This is what makes Turn 3b the hard barrier Turn 2 relies on: no pass-K agent is still reading a bundle when pass K+1 overwrites it.
+4. Do NOT poll or sleep; act only on completion notifications. **The queue file is the truth.** A pass stretches over many notifications, and the orchestrator's memory of what is running can be summarized away underneath it — whenever the state is uncertain, Read `queue-{K}.tsv` and refill from what it says, never from what you remember.
 
 **While you wait, on the first pass only, Read `{resolved_path}/dedup-and-assembly.md`.** It holds the whole of Turn 4 and Turn 5. This turn is the one point in the scan where the orchestrator has nothing else to do, so the read costs no wall-clock; and having it in hand before Turn 4 starts is what keeps Turn 4 from improvising. Later passes already hold it.
 
-**When an agent dies.** Continue the pass with the eleven that came back. **Never respawn it, in any mode.** A retry costs an unbounded wait for one twelfth of the coverage, and a loop covers it for free — the next pass runs the same twelve specialties again, knowing what this one found. Record the loss in all three places, or it is a silent coverage loss: the pass summary line (Turn 4 step 5), the `run-K.md` header, and the report's `Passes` row.
+**When an agent dies.** Mark its line `FAILED` — terminal, same as `COMPLETED`, but it came back nothing. Its slot refills from the queue exactly like any other: a death costs coverage, not wall-clock. **Never respawn the dead task itself, in any mode.** A retry costs an unbounded wait for one twelfth of the coverage, and a loop covers it for free — the next pass runs the same twelve specialties again, knowing what this one found. Record the loss in all three places, or it is a silent coverage loss: the pass summary line (Turn 4 step 5), the `run-K.md` header, and the report's `Passes` row.
 
 **When a whole pass produces nothing** — the bundle build failed, or all twelve died:
 
