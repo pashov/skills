@@ -21,7 +21,7 @@ Both turns use `{stamp}`, `{bundle_dir}`, `{passes}`, `{resolved_path}` and
 
 Then, after the loop body has run `{passes}` times (or stopped early), go to Turn 5 once.
 
-1. **Dedup.** Parse every FINDING and LEAD from the 12 agents. Group by `group_key` (Contract | function | bug-class). Exact-match first; merge synonymous bug_class within same (Contract, function). Keep best per group, number sequentially, annotate `[agents: N]`.
+1. **Collect from the checkpoints, then dedup.** Read each of the twelve `{bundle_dir}/agent-N-out.md` files; the FINDING and LEAD blocks a file holds are that agent's output. The agent's final summary message is a cross-check on the counts, never a second source — a checkpoint that is missing or empty contributed nothing whatever its summary claims, and a summary that disagrees with its file is a warning to note, not a tie to break by trusting either side. Then group by `group_key` (Contract | function | bug-class). Exact-match first; merge synonymous bug_class within same (Contract, function). Keep best per group, number sequentially, annotate `[agents: N]`.
 
    **MANDATORY — Canonicalise the bug-class label (HARD GATE).** Before grouping, for every (Contract, function) whose agents used **more than one** bug-class label, choose **one** label and rewrite every one of those findings to carry it. Then group.
 
@@ -65,7 +65,7 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
 
    **Inline check before printing**: count distinct fixes from raw for this (Contract, function). ≥2 distinct but merged shows 1 → violation, add alternatives.
 
-   **MANDATORY — Completeness (HARD GATE).** Before print: list every unique (Contract, function, bug-class) in any raw FINDING/LEAD across the 12 agents. Every unique (Contract, function) MUST have ≥1 item in final. Zero = silent drop, fix it. Multiple bug-class within same (Contract, function) MAY collapse to one item (wide-description), but the (Contract, function) MUST survive. Print inline before report: `Completeness: N unique (Contract, function) in raw, N covered in final.`
+   **MANDATORY — Completeness (HARD GATE).** Before print: list every unique (Contract, function, bug-class) in any raw FINDING/LEAD across the twelve checkpoints. Every unique (Contract, function) MUST have ≥1 item in final. Zero = silent drop, fix it. Multiple bug-class within same (Contract, function) MAY collapse to one item (wide-description), but the (Contract, function) MUST survive. Print inline before report: `Completeness: N unique (Contract, function) in raw, N covered in final.`
 
    Composite chains: if A's output feeds B's precondition AND combined impact > either alone, add `Chain: [A] + [B]` at conf = min(A, B). Most audits: 0–2.
 
@@ -109,9 +109,9 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
    ````markdown
    # Run K — solidity-auditor
 
-   <!--RUN pass=K of=N stamp={stamp} sha=abc1234 agents=11/12-->
+   <!--RUN pass=K of=N stamp={stamp} sha=abc1234 agents=11/12 respawn=0 watchdog=0-->
 
-   Pass K of N · <date> · `abc1234` · 11/12 agents returned — the access-control agent died.
+   Pass K of N · <date> · `abc1234` · 11/12 agents returned — the access-control agent died twice.
 
    ## Findings
 
@@ -123,6 +123,8 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
    ````
 
    The sentence is for the human; the `<!--RUN-->` marker is what shell reads. `agents=11/12` is where the `Passes` row gets its degradation text, so a lost agent is on disk and not only in a printed line that scrolls away — and the dead agent's **name** stays here, in the sentence, and never enters the Scope table.
+
+   **`returned` counts non-empty checkpoints, not notifications.** `X/12` where X is the number of `agent-N-out.md` files that hold any content at all — heartbeat lines count, because a sweep that ran and found nothing still ran. A completed respawn counts in X, so a death the replacement recovered prints `12/12` with the sentence telling the story: `12/12 agents returned — the invariant agent died, its replacement finished (3F/1L → 9F/4L)`. `respawn=` and `watchdog=` are the pass's respawn and watchdog-kill counts — the assembler reads only `pass=` from the marker, so those two are for the human reading the runs directory.
 
    **These two headings and no others, in every run.** No `## New findings` in a later run — newness is already carried by the `NEW` / `KNOWN` tag and by `seen in k/N runs`, and a heading saying it again is a second source of truth that can disagree with the first. **No "verified clean", "checked" or "sound" section, under any name.** A path a pass did not raise is not a path a pass cleared, and a real scan invented such a section unasked. Nothing ever reads it back, and it is the same overstated-coverage defect this whole design exists to kill.
 
@@ -173,6 +175,21 @@ Then, after the loop body has run `{passes}` times (or stopped early), go to Tur
    ```
 
    Written only when a pass ran short, a missing key would mean two different things — a whole pass and a lost pass — and the assembler could not tell them apart.
+
+   **Then archive the checkpoint stats**, once per pass — Turn 5 deletes `{bundle_dir}`, and after that these five columns are the only record of how each agent actually worked:
+
+   ```bash
+   for i in $(seq 1 12); do
+     f={bundle_dir}/agent-$i-out.md
+     printf 'agent-%d\t%s\t%s\t%s\t%s\n' "$i" \
+       "$(wc -c < "$f" 2>/dev/null || echo 0)" \
+       "$(grep -c '^scanned:' "$f" 2>/dev/null || echo 0)" \
+       "$(grep -c '^\[' "$f" 2>/dev/null || echo 0)" \
+       "$(grep -cE '^(FINDING|LEAD) \|' "$f" 2>/dev/null || echo 0)"
+   done > .solidity-auditor/runs/{stamp}/pass-{K}-agent-stats.tsv
+   ```
+
+   The columns: agent, checkpoint bytes, heartbeat lines, `[Tool: ...]` marker lines, finding/lead blocks. This is the file the marker verification `shared-rules.md` promises reads after the run — an agent with findings and zero markers skipped the mental-tool protocol, and that violation is now on disk — and it is what a post-mortem uses to tell a disciplined worker from a stalled one.
 
    b. **Print one summary line**, only when `{passes}` is above 1, and nothing else — the last thing the pass does, after step 6 has written the ledger. It is the only thing the runner sees for minutes at a time, so it answers two questions: how far along, and is the loop still learning?
 

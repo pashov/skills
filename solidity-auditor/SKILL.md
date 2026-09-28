@@ -237,7 +237,7 @@ Then build `source.md`, run the memory step, and only then cat the bundles — i
 
 > **Turn 2 is split across the loop.** Step 1 runs **once per scan**: `source.md` provably cannot change between passes — one git SHA for the whole loop, no pruning between them — and it is the expensive half of the build. Step 2c and step 3 run **once per pass**, because only they carry the knowns, and re-catting twelve bundles from files already on disk is one Bash command. Steps 2a and 2b run once per scan with step 1, since both read that frozen source.
 >
-> **One `{bundle_dir}`, reused, everything overwritten.** `source.md` is written once and never touched again; `known-findings.md` and the twelve `agent-N-bundle.md` files are overwritten each pass. Disk stays flat whether the runner picked 1 pass or 10 — a directory per pass would hold 12 × N copies of the whole repo. This is safe because Turn 3b is a hard barrier: no pass-K agent is still reading a bundle when pass K+1 overwrites it. The cost, accepted: after the loop you cannot see what pass 2 told its agents. The durable record is the run files and the ledger.
+> **One `{bundle_dir}`, reused, everything overwritten.** `source.md` is written once and never touched again; `known-findings.md` and the twelve `agent-N-bundle.md` files are overwritten each pass, and the twelve `agent-N-out.md` checkpoints are truncated empty at Turn 3a of the new pass. Disk stays flat whether the runner picked 1 pass or 10 — a directory per pass would hold 12 × N copies of the whole repo. This is safe because Turn 3b is a hard barrier: no pass-K agent is still reading a bundle when pass K+1 overwrites it. The cost, accepted: after the loop you cannot see what pass 2 told its agents, and the checkpoints survive each pass only as the stats Turn 4 archives. The durable record is the run files and the ledger.
 
 1. **Once per scan.** `{bundle_dir}/source.md` — ALL in-scope `.sol` files, each with a `### path` header and fenced code block.
 2. **Turn 2 step 2 — Name map, prune and known findings** (below). SKIPPED whole when memory is off. Parts a and b run once per scan; part c runs **every pass**, because the ledger it reads grows as the loop learns.
@@ -374,18 +374,18 @@ passing memory down a loop; the command does not change, only the file it is poi
 
 Print line counts for every bundle and `source.md`. Do NOT inline source code into the Agent call prompt itself.
 
-**Turn 3a — Open the queue, launch the first three.** Runs **every pass**. The 12 agents are a **queue in agent-number order** run through **3 slots**: never more than 3 agents RUNNING at once, and never an idle slot while a PENDING agent remains. This turn opens the window; Turn 3b keeps it full.
+**Turn 3a — Open the queue, launch the first three.** Runs **every pass**. The 12 agents are a **queue in agent-number order** run through **3 slots** — 2 for the rest of a pass after a stall death, see Turn 3b: never more agents RUNNING at once than the slots allow, and never an idle slot while a PENDING agent remains. This turn opens the window; Turn 3b keeps it full.
 
 1. **Initialize the queue file** — one line per agent, in one Bash command:
 
    ```bash
-   for i in $(seq 1 12); do printf 'agent-%d\tPENDING\n' "$i"; done \
+   for i in $(seq 1 12); do printf 'agent-%d\tPENDING\t0\n' "$i"; done \
      > .solidity-auditor/runs/{stamp}/queue-{K}.tsv
    ```
 
-   A line's state is `PENDING` → `RUNNING` → `COMPLETED` or `FAILED`. The last two are **terminal** — nothing leaves them, not even a FAILED line.
+   A line is the agent, its state, and its respawn count. The state walks `PENDING` → `RUNNING` → `COMPLETED` or `FAILED`. `COMPLETED` is **terminal**. `FAILED` leaves the queue exactly once: while the respawn count reads `0`, the death rules of Turn 3b may relaunch the line — state back to `RUNNING`, count to `1`. A `FAILED` line with count `1` is as terminal as `COMPLETED`; nothing leaves it, not by refill and not by a second respawn.
 
-2. **Every state change is one command** — substitute the agent number and the new state:
+2. **Every state change is one command** — substitute the agent number and the new state; the command touches only the state column and leaves the respawn count alone:
 
    ```bash
    awk -F'\t' -v OFS='\t' -v a="agent-3" -v s="RUNNING" '$1==a{$2=s}1' \
@@ -393,8 +393,26 @@ Print line counts for every bundle and `source.md`. Do NOT inline source code in
      && mv .solidity-auditor/runs/{stamp}/queue-{K}.tsv.tmp .solidity-auditor/runs/{stamp}/queue-{K}.tsv
    ```
 
-3. **Launch agents 1, 2 and 3** in one message as **parallel BACKGROUND Agent calls** (`run_in_background=true`), and mark their three lines `RUNNING`. **Omit the `model` parameter on every Agent call, always** — each agent runs on the runtime's default model, the model the orchestrator itself runs on. Do NOT substitute any value, in any mode, on any runtime.
-4. Do NOT poll or sleep. The orchestrator is notified as each agent completes; Turn 3b's refill rules do the rest.
+3. **Open the event log and truncate the checkpoints** — one Bash command:
+
+   ```bash
+   : > .solidity-auditor/runs/{stamp}/events-{K}.tsv
+   for i in $(seq 1 12); do : > {bundle_dir}/agent-$i-out.md; done
+   ```
+
+   `events-{K}.tsv` is `time<TAB>agent<TAB>event<TAB>detail`, append-only, one `printf` per event, timestamp from `date +%H:%M:%S`:
+
+   ```bash
+   printf '%s\t%s\t%s\t%s\n' "$(date +%H:%M:%S)" "agent-3" "launch" "" \
+     >> .solidity-auditor/runs/{stamp}/events-{K}.tsv
+   ```
+
+   Every launch, finish, death, respawn and watchdog action of this pass lands here as it happens. The recovery rules of Turn 3b read this file back for the slot width and the liveness comparison — never orchestrator memory — and a post-mortem after the scan reads it for what actually happened. The events: `launch`, `done`, `stall-death`, `other-death`, `respawn`, `respawn-done`, `narrow`, `watchdog-stale`, `taskstop`.
+
+   The twelve `agent-N-out.md` checkpoints are the agents' work files; shared-rules.md owns their contents and the cadence the agents rewrite them at. Truncated here, once per pass — a fresh pass is a fresh sweep — and never mid-pass: a replacement agent resumes from a non-empty checkpoint, so emptying one is a pass boundary, not a launch step.
+
+4. **Launch agents 1, 2 and 3** in one message as **parallel BACKGROUND Agent calls** (`run_in_background=true`), mark their three lines `RUNNING`, and append one `launch` event per agent. **Omit the `model` parameter on every Agent call, always** — each agent runs on the runtime's default model, the model the orchestrator itself runs on. Do NOT substitute any value, in any mode, on any runtime. This rule covers respawn launches too.
+5. Do NOT poll or sleep. The orchestrator is notified as each agent completes; Turn 3b's refill rules do the rest.
 
 Agents 1–9 use the **single-specialty prompt** (Turn 3a-i). Agents 10–12 use the **gap-hunter prompt** (Turn 3a-ii).
 
@@ -402,23 +420,65 @@ Agents 1–9 use the **single-specialty prompt** (Turn 3a-i). Agents 10–12 use
 
 **Turn 3a-ii — Gap-hunter prompt (agents 10–12).** Use the template under "Gap-hunter prompt" in the same file.
 
-Two rules that file carries, repeated here because they are conditions and not text:
+Three rules that file carries, repeated here because they are conditions and not text:
 
 - The **"Known findings"** paragraph is included **only when memory is on and `known-findings.md` was appended**. On a plain scan the prompt is byte-identical to the one it has always been — a paragraph about a section that is not there would send agents hunting for it.
-- The **READ-ONLY** paragraph is **unconditional** — every agent, every mode, every pass. A real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference.
+- The **READ-ONLY** paragraph is **unconditional** — every agent, every mode, every pass. A real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference. Its single exception — the checkpoint file — is part of the unconditional text, not a loophole to widen.
+- The **checkpoint** paragraph is **unconditional** too — every agent, every mode, every pass. It is what makes a mid-sweep agent death recoverable instead of a total loss, and it is why Turn 4 collects findings from the checkpoint files and not from the agents' final messages.
 
-**Turn 3b — Sustain the three slots until the queue is done.** Runs **every pass**. A completion notification is not just news — it is a slot opening. Act on it in the message that carries it:
+**Turn 3b — Sustain the slots until the queue is done.** Runs **every pass**. A completion notification is not just news — it is a slot opening and the one moment the liveness check runs. Act on it in the message that carries it:
 
-1. **Mark the finished agent terminal** — `COMPLETED` for a normal finish, `FAILED` for a death — with the command from Turn 3a step 2.
-2. **Refill immediately.** While fewer than 3 lines read `RUNNING` and a line still reads `PENDING`, launch the next `PENDING` agent — lowest number first — as a BACKGROUND Agent call (`model` omitted, as always) and mark it `RUNNING`, **in the same message** as the notification. Several notifications arriving together refill several slots in one message. Never a 4th agent while 3 are RUNNING; never an idle slot while a PENDING agent remains.
-3. **The pass ends when all 12 lines are terminal** — `COMPLETED` or `FAILED`, nothing `PENDING`, nothing `RUNNING`. Only then proceed to Turn 4. This is what makes Turn 3b the hard barrier Turn 2 relies on: no pass-K agent is still reading a bundle when pass K+1 overwrites it.
-4. Do NOT poll or sleep; act only on completion notifications. **The queue file is the truth.** A pass stretches over many notifications, and the orchestrator's memory of what is running can be summarized away underneath it — whenever the state is uncertain, Read `queue-{K}.tsv` and refill from what it says, never from what you remember.
+1. **Mark the finished agent terminal** — `COMPLETED` for a normal finish, `FAILED` for a death — with the command from Turn 3a step 2, and log it: a `done` event for a normal finish; for a death, `stall-death` when the notification's error text names a stalled or failed model stream, otherwise `other-death`. The distinction is load-bearing — only `stall-death` narrows the slots.
+2. **Run the liveness check** (below). It rides on this notification; a check that waits for its own moment never runs.
+3. **Refill immediately.** A death whose line still reads respawn count `0` refills first with its **respawn** — "When an agent dies" below; the replacement re-occupies the slot its predecessor freed, because it is the same work unit resumed, not extra concurrency. Then, while fewer than `{slots}` lines read `RUNNING` and a line still reads `PENDING`, launch the next `PENDING` agent — lowest number first — as a BACKGROUND Agent call (`model` omitted, as always), mark it `RUNNING`, log `launch`, **in the same message** as the notification. Several notifications arriving together refill several slots in one message. `{slots}` is 3, or 2 for the rest of the pass once `events-{K}.tsv` holds a `narrow` event — read the events file, do not remember it. Never a `{slots+1}`th agent while `{slots}` are RUNNING; never an idle slot while a PENDING agent remains.
+4. **The pass ends when the queue is finished** — nothing `PENDING`, nothing `RUNNING`, and no `FAILED` line left with a `0` respawn count. Only then proceed to Turn 4. This is what makes Turn 3b the hard barrier Turn 2 relies on: no pass-K agent is still reading a bundle when pass K+1 overwrites it.
+5. Do NOT poll or sleep; act only on completion notifications. **The liveness check is the one exception, and it is not polling: it runs on the back of a notification that already arrived, reads file timestamps only, and never sleeps, blocks or waits.** **The queue file is the truth.** A pass stretches over many notifications, and the orchestrator's memory of what is running can be summarized away underneath it — whenever the state is uncertain, Read `queue-{K}.tsv` and refill from what it says, never from what you remember.
 
 **While you wait, on the first pass only, Read `{resolved_path}/dedup-and-assembly.md`.** It holds the whole of Turn 4 and Turn 5. This turn is the one point in the scan where the orchestrator has nothing else to do, so the read costs no wall-clock; and having it in hand before Turn 4 starts is what keeps Turn 4 from improvising. Later passes already hold it.
 
-**When an agent dies.** Mark its line `FAILED` — terminal, same as `COMPLETED`, but it came back nothing. Its slot refills from the queue exactly like any other: a death costs coverage, not wall-clock. **Never respawn the dead task itself, in any mode.** A retry costs an unbounded wait for one twelfth of the coverage, and a loop covers it for free — the next pass runs the same twelve specialties again, knowing what this one found. Record the loss in all three places, or it is a silent coverage loss: the pass summary line (Turn 4 step 5), the `run-K.md` header, and the report's `Passes` row.
+**Liveness check — on every completion notification, before refilling.** For each line reading `RUNNING`, test its checkpoint's age:
 
-**When a whole pass produces nothing** — the bundle build failed, or all twelve died:
+```bash
+find {bundle_dir}/agent-N-out.md -mmin +75
+```
+
+A file that prints is stale. Its mtime is the agent's last write — the pass-start truncation and the respawn `touch` both reset it, so a fresh launch reads young, a working agent keeps it young, and a silent stream lets it age. Stale alone is not a kill; kill only when BOTH hold:
+
+- the checkpoint is older than 75 minutes, **and**
+- the events log shows another agent that launched **after** this agent's own last `launch` event has already finished — a whole peer lifetime has passed around the silent one.
+
+On both: `TaskStop` the agent, log `taskstop`, mark its line `FAILED`, log `watchdog-stale` with the age as detail, and handle it exactly as a death below — respawn included, resuming from the checkpoint the kill just preserved. A watchdog kill does **not** narrow the slots: only the client's own `stall-death` verdict is confirmed upstream evidence, and the watchdog is suspicion.
+
+> **The check has a blind spot, by design.** It rides on completion notifications, and when the last agents of a pass are RUNNING, no further notification arrives until one of them finishes or dies. A tail agent stalled mid-stream is then caught only by the client's own retry limit, exactly as it was before this rule existed. Do not fix this with sleeping, polling or timed waits — the orchestrator cannot wake on a timer, and a blocking wait *is* the notification. Accept the tail.
+
+**When an agent dies.** Mark its line `FAILED` and log `stall-death` or `other-death` (step 1). Then:
+
+- **Respawn count `0` → respawn, once.** Count what the dead checkpoint holds:
+
+  ```bash
+  printf 'prior=%dF/%dL\n' "$(grep -c '^FINDING |' {bundle_dir}/agent-N-out.md)" \
+    "$(grep -c '^LEAD |' {bundle_dir}/agent-N-out.md)"
+  ```
+
+  (`grep -c` prints `0` even on its non-match exit; take the number and ignore the code.) Log a `respawn` event with that as detail (`prior=3F/1L`), `touch {bundle_dir}/agent-N-out.md` so the replacement starts with a young mtime and its own 75-minute liveness window, relaunch the same agent number as a BACKGROUND Agent call (`model` omitted) with the same specialty prompt **plus the Resume paragraph** from `agent-prompts.md`, log `launch`, and set the line `RUNNING` with the respawn count `1` in one command:
+
+  ```bash
+  awk -F'\t' -v OFS='\t' -v a="agent-4" '$1==a{$2="RUNNING"; $3="1"}1' \
+    .solidity-auditor/runs/{stamp}/queue-{K}.tsv > .solidity-auditor/runs/{stamp}/queue-{K}.tsv.tmp \
+    && mv .solidity-auditor/runs/{stamp}/queue-{K}.tsv.tmp .solidity-auditor/runs/{stamp}/queue-{K}.tsv
+  ```
+
+  The replacement adopts the checkpoint and continues the sweep — a death costs minutes, not the agent's whole contribution.
+
+- **Respawn count `1` → the loss is real.** The replacement died too; nothing is respawned a second time. Record the loss in all three places, or it is a silent coverage loss: the pass summary line (Turn 4 step 5b), the `run-K.md` header, and the report's `Passes` row.
+
+This rule replaced an older one — *never respawn the dead task, a death costs coverage but not wall-clock* — and the replacement is deliberate. The old rule assumed a retry replays the agent from zero for an unbounded wait, and the checkpoint inverted the assumption: a replacement starts from everything its predecessor wrote. A real scan in September 2026 made it concrete — three agents dead of stalled model streams after hours of client retries, three replacements dispatched, all three finished. A respawn now costs minutes and keeps the twelfth of the coverage. The bound stays: **one** respawn per agent per pass. A second death is a pattern, not bad luck, and the loop's next pass — not another retry — is what covers it.
+
+**When the death was a `stall-death`** — the client reported the model stream itself stalled — append a `narrow` event and refill to 2 slots for the rest of the pass; step 3 reads the width back from the events file. A stalled stream is upstream evidence, and one fewer simultaneous long-thinking stream lowers the odds of the next stall. Narrow once per pass — 2 is the floor — and only `stall-death` triggers it: a watchdog kill or an `other-death` does not.
+
+**When a respawned agent finishes**, log `respawn-done` with the checkpoint's counts as detail (`now=9F/4L`). The delta against that agent's `prior=` is the replacement's own contribution, on disk where the next post-mortem can read it.
+
+**When a whole pass produces nothing** — the bundle build failed, or all twelve died with their replacements:
 
 **Record the failure before doing either.** A pass that produces nothing writes no run file, so nothing else on disk knows it was ever planned:
 

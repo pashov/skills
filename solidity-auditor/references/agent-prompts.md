@@ -28,11 +28,19 @@ out-of-scope context (interfaces/, mocks/, test/, and dependency
 sources under node_modules/ or lib/ — read a base contract when the
 behaviour it inherits matters).
 
-You are READ-ONLY inside the audited repository. Never create, edit or
-delete a file there — not a Foundry PoC, not a test, not a scratch note,
-not even one you intend to delete afterwards. An audit that changes the
-code it is measuring is not an audit. Write proof-of-concept code in your
-own scratchpad, or quote it in your finding as text.
+You are READ-ONLY inside the audited repository, with exactly one
+exception: your checkpoint file {bundle_dir}/agent-N-out.md. Every other
+file there — source, build output, a Foundry PoC, a test, a scratch note,
+even one you intend to delete afterwards — stays untouched. An audit that
+changes the code it is measuring is not an audit. Write proof-of-concept
+code in your own scratchpad, or quote it in your finding as text.
+
+Your checkpoint file is {bundle_dir}/agent-N-out.md — your single
+deliverable. Findings, worklog markers and `scanned:` progress lines go
+into it as you work, rewritten whole with the Write tool each time; the
+cadence is in shared-rules.md. The orchestrator collects your findings
+from the file, so your final message is only a short summary: the path,
+your FINDING and LEAD counts, one line on coverage.
 
 What a finding looks like:
 - file, function
@@ -57,12 +65,14 @@ spend your effort on new ground, report every bug you find in full —
 the listed ones included — and reuse its bug-class labels for the same
 class of bug in the same function.
 
-Output format: see shared-rules.md inside your bundle.
+Output format and checkpoint cadence: see shared-rules.md inside your bundle.
 ```
 
 The "Known findings" paragraph is included **only when memory is on and `known-findings.md` was appended**. On a plain scan the prompt is byte-identical to the one it has always been — a paragraph about a section that is not there would send agents hunting for it.
 
-The READ-ONLY paragraph is **unconditional** — every agent, every mode, every pass. It is here because a real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference.
+The READ-ONLY paragraph is **unconditional** — every agent, every mode, every pass. It is here because a real scan proved it necessary: an agent built Foundry proof-of-concept files inside the audited repository and deleted them afterwards. It left the tree clean and the stored SHA honest, and it was still wrong. A later editor must not make it conditional, and must not soften it into a preference. Its single exception — the checkpoint file — is part of the unconditional text: do not widen it to a second file, and do not narrow it away.
+
+The **checkpoint paragraph is likewise unconditional** — every agent, every mode, every pass, and the final message stays a summary. The checkpoint is the only thing that survives a dead model stream, which is why it exists at all.
 
 ## Gap-hunter prompt
 
@@ -81,11 +91,19 @@ out-of-scope context (interfaces/, mocks/, test/, and dependency
 sources under node_modules/ or lib/ — read a base contract when the
 behaviour it inherits matters).
 
-You are READ-ONLY inside the audited repository. Never create, edit or
-delete a file there — not a Foundry PoC, not a test, not a scratch note,
-not even one you intend to delete afterwards. An audit that changes the
-code it is measuring is not an audit. Write proof-of-concept code in your
-own scratchpad, or quote it in your finding as text.
+You are READ-ONLY inside the audited repository, with exactly one
+exception: your checkpoint file {bundle_dir}/agent-N-out.md. Every other
+file there — source, build output, a Foundry PoC, a test, a scratch note,
+even one you intend to delete afterwards — stays untouched. An audit that
+changes the code it is measuring is not an audit. Write proof-of-concept
+code in your own scratchpad, or quote it in your finding as text.
+
+Your checkpoint file is {bundle_dir}/agent-N-out.md — your single
+deliverable. Findings, worklog markers and `scanned:` progress lines go
+into it as you work, rewritten whole with the Write tool each time; the
+cadence is in shared-rules.md. The orchestrator collects your findings
+from the file, so your final message is only a short summary: the path,
+your FINDING and LEAD counts, one line on coverage.
 
 What a finding looks like:
 - file, function
@@ -111,9 +129,34 @@ spend your effort on new ground, report every bug you find in full —
 the listed ones included — and reuse its bug-class labels for the same
 class of bug in the same function.
 
-Output format: see shared-rules.md inside your bundle (gap-hunter-specific
+Output format and checkpoint cadence: see shared-rules.md inside your bundle (gap-hunter-specific
 output fields are in your specialty file).
 ```
 
 The same paragraph, under the same condition as Turn 3a-i: memory on and the file appended, or the paragraph is left out.
+
+## Resume paragraph — replacement agents
+
+When Turn 3b relaunches an agent whose predecessor died, give the
+replacement the same specialty prompt the predecessor got — checkpoint
+paragraph and any conditional paragraphs included — **plus this paragraph
+appended at the end**. Substitute the agent number.
+
+```
+Your predecessor on this specialty died mid-sweep. Its checkpoint is at
+{bundle_dir}/agent-N-out.md — read it before anything else. Everything in
+it is valid prior progress: adopt its FINDING and LEAD blocks as your own
+starting set, unchanged. The Worklog's last `scanned:` line marks where
+the sweep got to — re-cover that file from the start, because you cannot
+know how far into it the dead agent read, then continue the sweep to the
+end of the source. The checkpoint records progress, not conclusions: a
+file with no finding in it is a file swept part-way by a dead agent, not
+a file verified clean. Keep rewriting the checkpoint as you go, and
+return the same short summary any agent returns.
+```
+
+The paragraph changes nothing about the specialty, the READ-ONLY rule or
+the output rules — it changes only where the work starts. A replacement
+that polishes the predecessor's checkpoint and stops early has failed the
+same audit its predecessor died doing.
 
