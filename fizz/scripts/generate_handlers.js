@@ -111,12 +111,21 @@ function lcFirst(s) {
  * Return true if the file looks like an unmodified stub from generate_suite.js:
  * it has no function definitions between the Clamped / Unclamped markers.
  */
-function isStubHandler(filePath) {
+function isStubHandler(filePath, freshContent) {
     if (!fs.existsSync(filePath)) return true; // treat missing as writable
-    const content = fs.readFileSync(filePath, 'utf8');
+
+    const existing = fs.readFileSync(filePath, 'utf8');
+
+    // Untouched output from a prior run of this script with the same inputs —
+    // byte-for-byte identical to what we would generate right now. Safe to
+    // rewrite (this is what makes re-running generate_handlers.js after a
+    // selection change idempotent instead of permanently requiring --force).
+    if (existing === freshContent) return true;
+
     // Strip single-line comments to avoid matching "function" inside comments
-    const stripped = content.replace(/\/\/.*$/gm, '');
-    // If there are no `function ` keywords the file is still a bare stub
+    const stripped = existing.replace(/\/\/.*$/gm, '');
+    // generate_suite.js's empty shell has no `function ` keyword at all —
+    // also safe to overwrite.
     return !/\bfunction\s+\w+/.test(stripped);
 }
 
@@ -351,14 +360,14 @@ function main() {
 
         const handlerPath = path.join(handlersDir, `${contract.name}Handler.sol`);
         const relPath = path.relative(projectRoot, handlerPath);
+        const content = buildHandler(contract);
 
-        if (!force && fs.existsSync(handlerPath) && !isStubHandler(handlerPath)) {
+        if (!force && fs.existsSync(handlerPath) && !isStubHandler(handlerPath, content)) {
             console.log(`  [skip]  ${relPath}  (contains edits — use --force to overwrite)`);
             skipped++;
             continue;
         }
 
-        const content = buildHandler(contract);
         fs.writeFileSync(handlerPath, content);
         console.log(`  [wrote] ${relPath}  (${contract.functions.length} functions)`);
         written++;
