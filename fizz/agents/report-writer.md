@@ -26,6 +26,7 @@ Read these files (skip gracefully if any are missing and write `N/A` in the corr
 - `{PROJECT_ROOT}/{SUITE_DIR}/Base.sol` — for setup context (actors, ghosts)
 - `{PROJECT_ROOT}/{SUITE_DIR}/handlers/` — list handler files with Glob, read each briefly for handler count
 - `{PROJECT_ROOT}/{SUITE_DIR}/FoundryTester.sol` — for violation repro test results (look for `test_repro_*` functions and whether they passed validation)
+- `{PROJECT_ROOT}/{META_DIR}/verification-results.md` — symbolic verification results, **only if Step 10.5 ran**. This file is usually absent; that is the normal case, and its absence means you omit the Symbolic Verification section entirely (do not write `N/A`, do not mention the step).
 
 If the paths above are wrong for this project (e.g. a different fuzzer was used, or files live under a different meta dir), adapt — prefer reading whatever exists over erroring out.
 
@@ -100,6 +101,21 @@ Enumerate every property that appears in `Properties.sol` (both `property_*` glo
 - **LOW**: property is a stub that returns `true` without asserting anything, or the assertion is trivially satisfied.
 
 If `PROPERTIES.md` exists, cross-reference implementation status: `[x]` implemented, `[-]` skipped/manual, `[ ]` pending.
+
+## Symbolic Verification
+[OMIT THIS ENTIRE SECTION unless `{PROJECT_ROOT}/{META_DIR}/verification-results.md` exists — Step 10.5 is optional and skipped by default.]
+
+| Property | Result | Time | Assumptions |
+|----------|--------|------|-------------|
+| prove_shares_monotonic | ✅ verified | 0.4s | inputs ≤ uint128 |
+| prove_previewSwapExactOut | ⏳ timeout | 300s | — |
+
+Copy results verbatim from `verification-results.md`. Then, in two or three sentences, state what the proofs cover and what they do not. Four rules, all mandatory:
+
+- Only ✅ `verified` counts as proven. 👍 `passed` means "no counterexample found, some SMT queries returned unknown" — write it that way, never as a proof.
+- Report the domain with every result: the `uint128` input bound and any modelled contract in the proof harness.
+- A 💥 `failed` result under arithmetic abstraction is inconclusive, not a bug — report it as needing concrete reproduction, never as a finding.
+- Never write that the protocol is "formally verified". The verified unit is one property, in one domain, against one build, and it expires when that code changes. Say explicitly that multi-transaction behaviour is covered only by the fuzz campaign.
 
 ## Open TODOs
 Scan the generated suite files under `{PROJECT_ROOT}/{SUITE_DIR}/` (Base.sol, Snapshots.sol, Properties.sol, all handler files) for `TODO` comments and list them with file:line references.

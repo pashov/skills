@@ -61,6 +61,15 @@ Base (is StringUtils, Clamp, Deployer, Math)
 | `echidna.yaml` | Echidna fuzzer configuration. Points to `FuzzTester` as test target. |
 | `medusa.json` | Medusa fuzzer configuration. Points to `FuzzTester` as test target. |
 
+### Optional verification templates (NOT copied by the scaffold)
+
+`templates/symbolic/` is skipped by `generate_suite.js` and copied by hand only when the optional Step 10.5 runs. See [symbolic-verification.md](./symbolic-verification.md).
+
+| File | Copied to | Role |
+|---|---|---|
+| `symbolic/echidna-verify.yaml` | `test/fizz/symbolic/` | Echidna **verification-mode** config (`testMode: verification`, bitwuzla, `workers: 0`, `seqLen: 1`). Separate from the fuzzing `echidna.yaml`. Needs Echidna >= 2.4. |
+| `symbolic/ProveMath.t.sol` | `test/fizz/symbolic/` | Placeholder proof harness — `prove_*` properties over stateless math. Does not compile until the placeholders are replaced. |
+
 ## Output Structure
 
 ```
@@ -93,6 +102,9 @@ test/fizz/
 │   └── TokenHandler.sol # Example: handlers for Token contract
 ├── harness/             # Optional — only created when properties need private/internal access
 │   └── VaultHarness.sol # Example: exposes internal state from Vault
+├── symbolic/            # Optional — only created by Step 10.5 (Echidna verification mode)
+│   ├── echidna-verify.yaml
+│   └── ProveMath.t.sol  # prove_* properties over stateless math
 └── utils/
     ├── Clamp.sol        # Clamping helpers (clampBetween, clampLt, etc.)
     ├── DecimalPrinter.sol
