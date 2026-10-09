@@ -1,0 +1,236 @@
+{
+  "skill_name": "rust-auditor",
+  "evals": [
+    {
+      "id": 0,
+      "name": "sec-template-core-anchor",
+      "prompt": "Run rust auditor on the vulnerable programs in {TARGET_PROJECT_PATH} (Ubuntu-Technologies/solana-security-template @cb48608, comments stripped per evals/benchmarks.md section 0): signer-authorization, owner-check, account-type-mismatch, insecure-init, duplicate-accounts, pda-security, account-close, arithmetic-overflow.",
+      "expected_output": "High findings matching the documented class per module: missing signer (B1), missing owner (B2), type cosplay (B3), re-init (B4), duplicate mutable accounts (B6), non-canonical/predictable PDA (B7). account-close has NO revival bug (Anchor 0.32.1 `close = owner` zeroes and reassigns) - a B8 finding there is a false positive. arithmetic-overflow: unchecked arithmetic PANICS (root overflow-checks = true), so at most a Low DoS, not a wrapping High; the ignored `_min_out` (B16) is the real bug. Found-by-skill (re-confirmed in code): duplicate-accounts authority never bound to from_account.owner; owner-check read_config compares the caller key with no is_signer; account-type-mismatch process_action reads the key at data[1..33] against a repr(C) layout with the key at 16..48, so it always fails (correctness, Low). No finding of a module's documented bug on its paired secure.rs. Under judging.md Gate 1 the module's missing is_signer check may also appear as its own finding masked by the T7 offset; that expectation has not been re-scored.",
+      "files": [
+        "programs/signer-authorization/src/vulnerable.rs",
+        "programs/owner-check/src/vulnerable.rs",
+        "programs/account-type-mismatch/src/vulnerable.rs",
+        "programs/insecure-init/src/vulnerable.rs",
+        "programs/duplicate-accounts/src/vulnerable.rs",
+        "programs/pda-security/src/vulnerable.rs",
+        "programs/account-close/src/vulnerable.rs",
+        "programs/arithmetic-overflow/src/vulnerable.rs",
+        "programs/owner-check/src/lib.rs",
+        "programs/owner-check/src/state.rs",
+        "programs/account-type-mismatch/src/lib.rs",
+        "programs/account-type-mismatch/src/state.rs"
+      ],
+      "assertions": [
+        "[source] B1 missing-signer on signer-authorization",
+        "[source] B2 missing-owner on owner-check",
+        "[source] B3 type-cosplay on account-type-mismatch",
+        "[source] B4 reinit on insecure-init",
+        "[source] B6 duplicate-mutable on duplicate-accounts",
+        "[source] B7 pda on pda-security",
+        "[not-present] no B8 revival finding on account-close (close = owner, anchor 0.32.1)",
+        "[source, reclassified] arithmetic-overflow overflow scored as panic / DoS (overflow-checks = true), not as a wrapping value bug",
+        "[source] B16 ignored _min_out on arithmetic-overflow swap_x_for_y",
+        "[found-by-skill] T3 authority not bound to from_account.owner on duplicate-accounts",
+        "[found-by-skill] T5 no is_signer on caller in owner-check process_read_config",
+        "[found-by-skill] T7 correctness: process_action offsets misread the User layout (always fails) on account-type-mismatch",
+        "no finding of the module's documented bug on its paired secure.rs"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "sec-template-new-classes",
+      "prompt": "Run rust auditor on the account-griefing, authority-transfer, account-reloading, remaining-accounts and amm/buggy-amm programs in {TARGET_PROJECT_PATH} (solana-security-template @cb48608, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "Leads/findings for: account-creation DoS via predictable init PDA (B13); single-step authority transfer (B14); unvalidated remaining_accounts (B5-adjacent); and in buggy-amm weak PDA seeds (B7) + unchecked overflow that WRAPS (the programs/amm workspace has no overflow-checks) (B10) + missing slippage / ignored min_out (B16). account-reloading has NO stale-after-CPI bug (vulnerable.rs makes no CPI) - a B11 finding there is a false positive. Found-by-skill (re-confirmed in code): buggy-amm deposit mints the caller's `amount` of LP regardless of the x/y paid (free LP with max_x = max_y = 0).",
+      "files": [
+        "programs/account-griefing/src/vulnerable.rs",
+        "programs/authority-transfer/src/vulnerable.rs",
+        "programs/account-reloading/src/vulnerable.rs",
+        "programs/remaining-accounts/src/vulnerable.rs",
+        "programs/amm/buggy-amm/src/instructions/swap.rs",
+        "programs/amm/buggy-amm/src/instructions/deposit.rs"
+      ],
+      "assertions": [
+        "[source] B13 init-DoS on account-griefing",
+        "[source] B14 single-step-authority on authority-transfer",
+        "[not-present] no B11 stale-after-cpi finding on account-reloading (no CPI in vulnerable.rs)",
+        "[source] B5 unvalidated remaining_accounts on remaining-accounts",
+        "[source] B16 missing-slippage on buggy-amm swap",
+        "[source] B10 overflow on buggy-amm scored as wrapping (amm workspace has no overflow-checks)",
+        "[found-by-skill] T1 deposit mints amount LP independent of x/y paid on buggy-amm"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "sec-patterns-anchor-and-pinocchio",
+      "prompt": "Run rust auditor on the Anchor and Pinocchio vulnerable variants in {TARGET_PROJECT_PATH} (Abdullateef1x/solana-security-patterns @4646ebe).",
+      "expected_output": "Each pattern flagged in both anchor/ and pinocchio/ vulnerable.rs: missing signer (B1), missing has_one link (B1/B7), unsafe arithmetic (B10), insecure PDA (B7), CPI authority misuse / user-controlled transfer authority (B5). Tests account-map + native/Pinocchio manual-validation review; not the --poc build path (repo may not build).",
+      "files": [
+        "programs/missing-signer-check/anchor/src/vulnerable.rs",
+        "programs/missing-has-one/anchor/src/vulnerable.rs",
+        "programs/unsafe-arithmetic/anchor/src/vulnerable.rs",
+        "programs/insecure-pda/anchor/src/vulnerable.rs",
+        "programs/cpi-authority-misuse/anchor/src/vulnerable.rs",
+        "programs/missing-signer-check/pinocchio/src/vulnerable.rs",
+        "programs/missing-has-one/pinocchio/src/vulnerable.rs",
+        "programs/unsafe-arithmetic/pinocchio/src/vulnerable.rs",
+        "programs/insecure-pda/pinocchio/src/vulnerable.rs",
+        "programs/cpi-authority-misuse/pinocchio/src/vulnerable.rs"
+      ],
+      "assertions": [
+        "B1 on missing-signer-check (both frameworks)",
+        "B7/B1 on missing-has-one",
+        "B10 on unsafe-arithmetic",
+        "B7 on insecure-pda",
+        "B5 on cpi-authority-misuse"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "escrow-pinocchio-destination-validation",
+      "prompt": "Run rust auditor on the p-escrow Pinocchio program in {TARGET_PROJECT_PATH} (solana-security-template @cb48608, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "A High finding that the refund destination is not validated against the stored maker, letting a refund be redirected to an attacker (destination/recipient validation, B15/L2) - a native/Pinocchio manual-validation miss. Found-by-skill (re-confirmed in code): process_secure_refund requires destination == caller (the maker's wallet) and token-transfers to it, so the secure refund fails for every caller and escrowed tokens cannot be refunded.",
+      "files": [
+        "programs/p-escrow/src/instructions"
+      ],
+      "assertions": [
+        "[source] refund destination not checked against escrow.maker",
+        "[found-by-skill] T9 process_secure_refund always fails (destination must equal the caller wallet)"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "halborn-ctf-native-noise-check",
+      "prompt": "Run rust auditor on the HalbornCTF_Rust_Solana native program in {TARGET_PROJECT_PATH} (HalbornSecurity/CTFs @684f1af).",
+      "expected_output": "A clean run on a native (non-Anchor) program: the account-map and native/Pinocchio review produce sane leads over hand-rolled account handling without crashing. Bugs are undisclosed (CTF); scored for robustness and plausible leads, not against a fixed answer key.",
+      "files": [
+        "HalbornCTF_Rust_Solana/ctf_game/ctf/src/processor.rs",
+        "HalbornCTF_Rust_Solana/ctf_game/ctf/src/instructions.rs",
+        "HalbornCTF_Rust_Solana/ctf_game/ctf/src/state.rs",
+        "HalbornCTF_Rust_Solana/ctf_game/ctf/src/lib.rs"
+      ],
+      "assertions": [
+        "no crash on native program",
+        "account-map emits native handler rows"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "m0-mextensions-pre-fix",
+      "prompt": "Run rust auditor on the ext_swap and m_ext programs in {TARGET_PROJECT_PATH} (m0-foundation/solana-extensions at the PRE-FIX commit 25e29e1, snapshot with git archive, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "The M0 MExtensions report findings at 25e29e1 (the report links pin AdevarLabs/solana-extensions@25e29e1c4564b12cb811e9461b44b5305a824ac9; fixed later by fc4d934 - auditing HEAD scores nothing): #1 Critical missing admin access control on ext_swap whitelist ops; #2 retroactive fee application; #3 imprecise multiplier toward insolvency; #4 swap does not forbid a same-token swap; #5 m_ext init front-running; #6 misaligned Anchor constraint on the swap source token account. Found-by-skill (re-confirmed at 25e29e1, corroborated by fc4d934): wrap/unwrap/sync depend on the vault's Earner account; set_m_mint keeps the old mint's stored index; ext_swap initialize_global is first-caller-wins. Note: the skill's Part C cites #1/#2/#3/#5/#6, so this target measures fit, not generalisation.",
+      "files": [
+        "programs/ext_swap/src",
+        "programs/m_ext/src"
+      ],
+      "assertions": [
+        "[source] #1 missing admin check on ext_swap whitelist instructions",
+        "[source] #2 retroactive fee application",
+        "[source] #3 imprecise multiplier",
+        "[source] #4 same-token swap not forbidden",
+        "[source] #5 m_ext initialize front-running",
+        "[source] #6 swap source token account constraint",
+        "[found-by-skill] M0-A1 wrap/unwrap/sync depend on the per-vault Earner account",
+        "[found-by-skill] M0-A2 set_m_mint keeps a stale index",
+        "[found-by-skill] M0-A3 ext_swap initialize_global first caller becomes admin"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "sec-template-secure-variants-real-bugs",
+      "prompt": "Run rust auditor on the secure variants in {TARGET_PROJECT_PATH} (solana-security-template @cb48608, comments stripped per evals/benchmarks.md section 0): duplicate-accounts, owner-check, account-type-mismatch, p-escrow, amm/secure-amm.",
+      "expected_output": "The secure variants fix their module's documented bug but still carry real bugs (found-by-skill, re-confirmed in code): duplicate-accounts authority not bound to from_account.owner (T3); owner-check read_config with no is_signer (T5); account-type-mismatch process_action offsets misread the layout so it always fails (T7, correctness); p-escrow secure refund always fails (T9); secure-amm deposit mints amount LP regardless of x/y (T1) and divides by an integer ratio that is 0 when vault_x < vault_y (T2, DoS). No finding of the module's documented bug. Under judging.md Gate 1 the module's missing is_signer check may also appear as its own finding masked by the T7 offset; that expectation has not been re-scored.",
+      "files": [
+        "programs/duplicate-accounts/src/secure.rs",
+        "programs/owner-check/src/secure.rs",
+        "programs/account-type-mismatch/src/secure.rs",
+        "programs/p-escrow/src/instructions/refund.rs",
+        "programs/amm/secure-amm/src/instructions/deposit.rs"
+      ],
+      "assertions": [
+        "[found-by-skill] T3 on duplicate-accounts secure",
+        "[found-by-skill] T5 on owner-check secure",
+        "[found-by-skill] T7 correctness on account-type-mismatch secure",
+        "[found-by-skill] T9 on p-escrow secure refund",
+        "[found-by-skill] T1 free LP on secure-amm deposit",
+        "[found-by-skill] T2 zero-ratio DoS on secure-amm deposit",
+        "no finding of the module's documented bug"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "solana-program-escrow-pinocchio-token2022",
+      "prompt": "Run rust auditor on program/src in {TARGET_PROJECT_PATH} (solana-program/escrow @b27a635, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "Findings matching the Accretion A26SFR3 report (evals/benchmarks.md section 9): withdraw does not bind the mint to the receipt (C1); hook CPI forwards the user signer (H2); mint close-and-recreate bypasses the allow-time extension check, kept separate from the deposit re-check (H3); retroactive withdrawal rules (M1); blocklist not enforced at deposit (M2); transfer-fee accounting (M3); pre-funded create_account DoS (M4); the Low/Info items as findings or hardening- leads. Used to develop the skill, so this scores fit, not generalisation.",
+      "files": [
+        "program/src"
+      ],
+      "assertions": [
+        "[source] C1 withdraw mint not checked against the receipt mint",
+        "[source] H1 stale TLV tail on a shorter extension update (latent at b27a635)",
+        "[source] H2 hook CPI forwards the user signer",
+        "[source] H3 mint close authority lets a re-created mint bypass the allow-time extension check",
+        "[source] M1 timelock / hook / arbiter changes apply retroactively",
+        "[source] M2 blocked extensions not re-checked at deposit",
+        "[source] M3 transfer-fee mint over-credits deposits",
+        "[source] M4 pre-funded PDA blocks create_account",
+        "[source] L1-L5, I1-I2 reported as findings or hardening- leads",
+        "H3 and M2 stay two items (different fixes)"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "rustfund-anchor-crowdfunding",
+      "prompt": "Run rust auditor on programs/rustfund/src/lib.rs in {TARGET_PROJECT_PATH} (CodeHawks-Contests/2025-03-rustfund @b5dd7b0, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "Findings matching the valid items of the judged CodeHawks report (evals/benchmarks.md section 11): withdraw checks neither the deadline nor the goal (H-01, H-02); contribute never records contribution.amount (H-03); refund ignores the goal (H-04) and does not lower amount_raised (M-03), both masked by H-03 and gated as findings that name it; withdraw does not reset amount_raised (M-01); set_deadline never sets dealine_set (M-02); refund passes while the deadline is 0 (L-01); no close path strands rent (L-04, correctness lane). No finding for the direct lamport debit (L-03, invalid). Used to develop the skill, so this scores fit, not generalisation.",
+      "files": [
+        "programs/rustfund/src/lib.rs"
+      ],
+      "assertions": [
+        "[source] H-01/H-02 withdraw has no deadline and no goal check",
+        "[source] H-03 contribute never adds the amount to contribution.amount",
+        "[source] H-04 refund does not check the goal (masked by H-03, reported as a finding)",
+        "[source] M-01 withdraw does not reset amount_raised",
+        "[source] M-02 set_deadline never sets dealine_set",
+        "[source] M-03 refund does not lower amount_raised (masked by H-03, reported as a finding)",
+        "[source] L-01 refund skips the time check while the deadline is 0",
+        "[source] L-04 no instruction closes Fund or Contribution accounts",
+        "[found-by-skill] fund_create fails for names longer than 32 bytes (PDA seed limit)",
+        "no finding that a checked lamport debit from the program-owned fund is unsafe (L-03 is invalid)"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "ssswap-anchor-amm",
+      "prompt": "Run rust auditor on programs/amm/src in {TARGET_PROJECT_PATH} (CodeHawks-Contests/2025-05-ssswap @27a2ef8, comments stripped per evals/benchmarks.md section 0).",
+      "expected_output": "Findings matching the valid items of the judged CodeHawks report (evals/benchmarks.md section 12): wrong LP formula in provide_liquidity (H-01); no deposit slippage bound (H-02); pool-creation PDA collision (M-01); unchecked u128 as u64 casts, including the swap_exact_out reserve drain (M-02); fee floors to zero on small swaps (M-04, both swap directions). No finding for missing decimal normalisation (H-03), stale vault state (H-04) or lp_mint init order (M-03), all invalid. 12/12 agents return results. Used to develop the skill, so this scores fit, not generalisation.",
+      "files": [
+        "programs/amm/src"
+      ],
+      "assertions": [
+        "[source] H-01 provide_liquidity LP amount formula is wrong",
+        "[source] H-02 provide_liquidity has no slippage bound",
+        "[source] M-01 an attacker blocks pool creation for a pair",
+        "[source] M-02 unchecked u128 as u64 cast lets swap_exact_out drain the output reserve",
+        "[source] M-04 the swap fee rounds to zero on small swaps",
+        "[found-by-skill] ATAs without associated_token::token_program make every Token-2022 pool fail",
+        "no finding for missing decimal normalisation, stale vault state or lp_mint init order",
+        "12/12 agents return results (no safety-classifier stop)"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "garden-anchor-htlc-false-positive-control",
+      "prompt": "Run rust auditor on the two Solana programs in {TARGET_PROJECT_PATH} (code-423n4/2025-11-garden @933f545, snapshot per evals/benchmarks.md section 13, comments stripped per section 0).",
+      "expected_output": "No Finding at or above the threshold that is not a real defect: the published report has no High or Medium in the Solana programs. A missing redeemer != refundee check may appear as a hardening- Lead. The same-account-on-both-legs case when the funder names the identity PDA is self-harm and stays a hardening- Lead. Used to develop the skill, so this scores fit, not generalisation.",
+      "files": [
+        "solana/solana-native/programs/solana-native-swaps/src/lib.rs",
+        "solana/solana-spl-swaps/programs/solana-spl-swaps/src/lib.rs"
+      ],
+      "assertions": [
+        "no false-positive Finding at or above confidence 75",
+        "no correctness-lane Finding for a state only the funder's own input creates",
+        "the Build context reports two workspaces, both with overflow-checks on"
+      ]
+    }
+  ]
+}

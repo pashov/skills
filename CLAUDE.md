@@ -10,6 +10,7 @@ A library of Claude AI skills. Each skill is a focused, self-contained capabilit
 
 ```
 solidity-auditor/ # Security review of Solidity changes while you develop
+rust-auditor/     # Security review of Rust Solana programs while you develop
 CLAUDE.md            # This file (read by Claude Code)
 ```
 
