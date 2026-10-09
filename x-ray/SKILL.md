@@ -100,7 +100,7 @@ ALL calls (coverage, git analysis, reference reads, spec glob) MUST appear in th
 
 ## Step 2: Read Source Files + Entry Point Scan (SINGLE message, ALL tool calls parallel)
 
-CRITICAL: Every tool call — Bash, Agent, Read, Grep — MUST be issued in ONE message so they run concurrently. This includes source file reads, the entry point grep scan, and any spec doc detected in Step 1 (they are all independent).
+CRITICAL: Every tool call — Bash, Agent, Read, Grep — MUST be issued in ONE message so they run concurrently. This includes source file reads, the entry point scan, and any spec doc detected in Step 1 (they are all independent).
 
 ### Scope Filtering
 - Skip interfaces: `interfaces/` dirs or filenames `I` + uppercase letter
@@ -144,37 +144,28 @@ For EACH file, return this exact format:
   - `functionName()` — NONE — calls `ContractName.method()`
 ```
 
-### Entry Point Grep Scan (INCLUDED in the same parallel message as source reads)
+### Entry Point Scan (INCLUDED in the same parallel message as source reads)
 
-Launch these two **Bash** calls in the SAME message as the source file reads above — they are independent and can run concurrently. Commands use **only POSIX ERE + POSIX character classes** (no `-P` / PCRE, no GNU-only escapes like `\s` `\w` `\b`), so they work identically on GNU grep (Linux/WSL), BSD grep (macOS default `/usr/bin/grep`, FreeBSD), and ripgrep:
-
-```bash
-# 1. Single-line signatures: function name and visibility on same line
-grep -rnE 'function[[:space:]]+[[:alnum:]_]+[[:space:]]*\([^)]*\)[[:space:]]+(external|public)' [src-dir]/ --include='*.sol' \
-  | grep -v '/interfaces/' | grep -v '/mock/' \
-  | grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'
-```
+Launch this **Bash** call in the SAME message as the source file reads above — it is independent and can run concurrently:
 
 ```bash
-# 2. Multiline signatures: visibility keyword on the closing-paren line (covers 90%+ of multiline cases)
-grep -rnE '^[[:space:]]*\)[[:space:]]+(external|public)' [src-dir]/ --include='*.sol' -B5 \
-  | grep -v '/interfaces/' | grep -v '/mock/' \
-  | grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'
+python3 $SKILL_DIR/scripts/entry_points.py [src-dir]
 ```
-Combine results from both. The multiline grep is critical — Solidity functions often split parameters across lines, putting `external`/`public` on the `)` line while `function name(` is lines above. The trailing `grep -Ev '(^|[^[:alnum:]_])(view|pure)([^[:alnum:]_]|$)'` is the POSIX-portable substitute for `\b(view|pure)\b`: it drops any line where `view` or `pure` appears as a standalone identifier (surrounded by non-identifier chars or line boundaries), while preserving lines that merely contain `view_param` / `pure_x` identifier substrings.
 
-**Portability guarantees:**
-- `-E`, `-v`, `-r`, `-n`, `-B` → POSIX (2001+) / supported by macOS, FreeBSD, Linux GNU grep, busybox grep, ripgrep
-- `[[:space:]]`, `[[:alnum:]_]` → POSIX character classes, supported by all above
-- `--include='*.sol'` → GNU + macOS BSD grep + ripgrep. Not supported by busybox grep (niche; Alpine minimal); if the skill ever needs to run there, replace `--include='*.sol' [src]/` with `$(find [src]/ -name '*.sol')` passed as arguments.
+The script reads every function header as a whole — from `function` (or `receive` / `fallback`) to its opening `{` — after blanking comments and string literals. Do NOT substitute a line-by-line grep: formatters routinely split headers across lines (`forge fmt`'s default `multiline_func_header = "attributes_first"` puts `external` on its own line, and one-parameter-per-line headers put `function name(` several lines above `) external`), and line-oriented patterns silently drop those functions. The script needs only `python3`, which Step 1's git analysis also uses. If it cannot run, read the function headers of every in-scope file yourself (not from subagent summaries) to build the list.
 
-ALL tool calls (source reads/Bash/subagents, BOTH grep scans) MUST be in ONE message.
+Output is one line per entry point — `path:line: [abstract|library] Container.name(params) attributes` — followed by a `# N entry point(s) in M of K .sol file(s)` summary. If K is 0, check `[src-dir]` before continuing. Unreadable files or directories are reported on stderr and counted in the summary. The script lists every non-`view`/non-`pure` `external` or `public` function, including `receive`, `fallback` and initializers, and skips interfaces, bodiless declarations, `internal`/`private` and free functions, and paths containing `/interfaces/` or `/mock/`. Markers:
+- `[abstract]` — defined in an abstract contract: attribute it to every concrete contract that inherits it, unless a contract lower in the hierarchy overrides it (then the override's modifiers apply).
+- `[library]` — a library function, not an entry point: direct calls to non-view library functions revert, so they are reachable only through the contracts that call them. Treat them as downstream calls.
+- `// ordinary function named receive` (or `fallback`) — a regular function that only has that name; it does not receive plain ETH transfers or handle unknown calls.
+
+ALL tool calls (source reads/Bash/subagents, the entry point scan) MUST be in ONE message.
 
 Do NOT read test files or documentation files.
 
 ### Step 2b: Entry Point Classification
 
-Using the grep results already returned from Step 2's parallel message, classify ALL entry points. Do NOT rely solely on subagent summaries — subagents extract facts at the contract level and can misattribute which function makes which external call or which function has which modifier.
+Using the entry point scan results already returned from Step 2's parallel message, classify ALL entry points. Do NOT rely solely on subagent summaries — subagents extract facts at the contract level and can misattribute which function makes which external call or which function has which modifier.
 
 **Exclude** from entry points: view/pure functions, interface-only declarations, library internal functions (they're downstream calls, not entry points), mock contracts.
 
@@ -216,7 +207,7 @@ Using the entry point data already collected in Step 2b, construct flow paths fo
 
 **Output**: Simple arrow chains grouped by actor flow. Reference earlier flows instead of repeating. 15-30 lines total. See the Protocol Flow Paths section in the entry-points.md template for exact format.
 
-The grep scan is a **hard gate**: the permissionless entry points section in the report must match this grep-verified list, not the subagent summaries. If there is a conflict, the grep + code reading result wins.
+The entry point scan is a **hard gate**: the permissionless entry points section in the report must match this scan-verified list, not the subagent summaries. If there is a conflict, the scan + code reading result wins.
 
 ### Step 2c: Backwards-Compatibility Code Detection
 
@@ -350,7 +341,7 @@ All output files go into the `x-ray/` directory. Write ALL FOUR files in a SINGL
 **Writing Section 2 (Threat & Trust Model)** — Follow the structure in the output template. Use `references/threats.md` for threat profiles, temporal threats, and composability threats content (all in one file, already loaded in Step 1). For hybrids, merge: primary adversary list first, then unique secondary threats (de-duplicate overlapping ones).
 
 **Verification rules** (apply during Section 2 writing):
-- **Permissionless entry points**: Use only the grep-verified list from Step 2b. The Step 2b procedure is the source of truth — do not rely on subagent summaries.
+- **Permissionless entry points**: Use only the scan-verified list from Step 2b. The Step 2b procedure is the source of truth — do not rely on subagent summaries.
 - **Security claims**: Before writing any claim that a security check is missing, incomplete, or bypassable, you MUST trace the actual data flow by reading the relevant code. Specifically: (1) identify all write sites for the variable under question (use Grep), (2) confirm your claim holds against those write sites. Subagent summaries are not sufficient. If you cannot verify, qualify the claim with "could not confirm" rather than stating it as fact.
 
 **Section 7 (Git History)**: Integrate `x-ray/git-security-analysis.json` into: Contributors, Review Signals, Hotspots, Security-Relevant Commits (score >= 5), Dangerous Area Evolution, Forked Dependencies, Tech Debt, Cross-Reference Synthesis (2-4 bullets connecting git signals to Sections 2-3).
