@@ -42,7 +42,9 @@ if [ ! -f "$PROJECT_ROOT/foundry.toml" ]; then
         echo "Hardhat project detected — writing a Foundry-compatible config..."
 
         # Hardhat-compatible layout per Foundry docs.
-        SRC_DIR=$(grep -oP "sources\s*:\s*['\"]?\K[^'\"',}]+" "$HH_CONFIG" 2>/dev/null | head -1 || true)
+        # POSIX ERE, not PCRE: macOS BSD grep cannot do PCRE, so this extraction used to
+        # fail silently and fall back to a guessed directory.
+        SRC_DIR=$(sed -nE "s/.*sources[[:space:]]*:[[:space:]]*['\"]?([^'\"',}]+).*/\1/p" "$HH_CONFIG" 2>/dev/null | head -1 || true)
         SRC_DIR="${SRC_DIR#./}"
         if [ -z "$SRC_DIR" ]; then
             if [ -d "contracts" ]; then
@@ -54,7 +56,7 @@ if [ ! -f "$PROJECT_ROOT/foundry.toml" ]; then
             fi
         fi
 
-        ARTIFACTS_DIR=$(grep -oP "artifacts\s*:\s*['\"]?\K[^'\"',}]+" "$HH_CONFIG" 2>/dev/null | head -1 || true)
+        ARTIFACTS_DIR=$(sed -nE "s/.*artifacts[[:space:]]*:[[:space:]]*['\"]?([^'\"',}]+).*/\1/p" "$HH_CONFIG" 2>/dev/null | head -1 || true)
         ARTIFACTS_DIR="${ARTIFACTS_DIR#./}"
         if [ -z "$ARTIFACTS_DIR" ]; then
             ARTIFACTS_DIR="out"
