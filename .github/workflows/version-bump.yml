@@ -17,8 +17,24 @@ jobs:
 
       - name: Bump version
         run: |
-          CURRENT=$(cat solidity-auditor/VERSION | tr -d '[:space:]')
-          NEW=$((CURRENT + 1))
+          set -euo pipefail
+          CURRENT=$(tr -d '[:space:]' < solidity-auditor/VERSION)
+
+          # A VERSION may be an integer (2) or a dotted one (4.1). Bash arithmetic is
+          # integer-only, so "4.1" raised an error, wrote an EMPTY file, and still exited 0
+          # -- the commit step then pushed a blank VERSION to main.
+          if ! printf '%s' "$CURRENT" | grep -qE '^[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::solidity-auditor/VERSION is not a numeric version: '${CURRENT}'"
+            exit 1
+          fi
+
+          PREFIX="${CURRENT%.*}"
+          if [ "$PREFIX" = "$CURRENT" ]; then
+            NEW=$((CURRENT + 1))                     # 3   -> 4
+          else
+            NEW="${PREFIX}.$(( ${CURRENT##*.} + 1 ))"   # 4.1 -> 4.2
+          fi
+
           echo "$NEW" > solidity-auditor/VERSION
           echo "Version bump: ${CURRENT} -> ${NEW}"
 
