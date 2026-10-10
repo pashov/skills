@@ -113,7 +113,12 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
 
             const fname = sfLine.slice(3).trim();
             const rel = path.relative(rootDir, fname);
-            if (!rel.startsWith('src' + path.sep) || rel.includes('node_modules')) continue;
+            // Exclude vendored and test code rather than requiring a 'src/' prefix: a Hardhat
+            // project's sources live in contracts/ (ensure_foundry.sh writes src = "contracts"),
+            // and the prefix test silently produced an empty summary for every one of them.
+            if (rel.includes('node_modules')) continue;
+            if (rel.startsWith('test' + path.sep) || rel.startsWith('lib' + path.sep)) continue;
+            if (rel.split(path.sep).includes('test') || rel.split(path.sep).includes('lib')) continue;
 
             const daLines = lines.filter(l => l.startsWith('DA:'));
             if (daLines.length === 0) continue;
@@ -140,7 +145,7 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
             }
         }
 
-        writeStderr(`\n${TAG} Coverage summary (src/ contracts):\n`);
+        writeStderr(`\n${TAG} Coverage summary (in-scope contracts):\n`);
         for (const { name, pct, lh, lf } of results) {
             const flag = pct < target ? ' !' : '  ';
             writeStderr(`${TAG}${flag} ${String(pct).padStart(3)}%  ${name.padEnd(maxName)}  (${lh}/${lf} lines)\n`);
@@ -170,7 +175,9 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
         if (!coverageMode) return;
 
         const elapsedMatch = line.match(/elapsed:\s*([\d,]+)s/i);
-        const branchesMatch = line.match(/branches hit:\s*([\d,]+)/i);
+        // Medusa prints "branches: N". Older builds printed "branches hit: N", so accept
+        // both — matching only the latter made plateau detection dead code on 1.5.x.
+        const branchesMatch = line.match(/branches(?: hit)?:\s*([\d,]+)/i);
 
         if (!elapsedMatch || !branchesMatch) return;
 
@@ -290,7 +297,10 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
             clearTimeout(graceTimer);
         }
 
-        if (coverageMode && !sawBranchesMetric) {
+        // Only meaningful when the fuzzer actually ran: a failed start (bad config, compile
+        // error) produces no progress lines either, and the old wording told the user the
+        // campaign had run and simply plateaued.
+        if (coverageMode && !sawBranchesMetric && !code) {
             writeStderr(`${TAG} No \`branches hit\` progress lines were observed; Medusa was not auto-stopped by plateau detection.\n`);
         }
 
