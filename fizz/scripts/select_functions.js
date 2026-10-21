@@ -77,7 +77,9 @@ function contractKey(contract) {
 }
 
 function functionKey(func) {
-    const inputs = (func.inputs || []).map(input => `${input.type}:${input.name || ''}`).join(',');
+    // internalType, not type: extract_abis maps every array to the single token "array",
+    // so uint256[] and address[] overloads produced the SAME key and both came back checked.
+    const inputs = (func.inputs || []).map(input => `${input.internalType || input.type}:${input.name || ''}`).join(',');
     return `${func.name}(${inputs})`;
 }
 
@@ -263,7 +265,8 @@ function contractKey(contract) {
 }
 
 function functionKey(func) {
-  const params = func.inputs.map(i => i.type + ':' + (i.name || '')).join(',');
+  // Keep this identical to the server-side functionKey.
+  const params = func.inputs.map(i => (i.internalType || i.type) + ':' + (i.name || '')).join(',');
   return func.name + '(' + params + ')';
 }
 
@@ -608,8 +611,10 @@ const server = http.createServer((req, res) => {
 // Track the server URL so buildHTML can embed it
 let serverURL = '';
 
-// Listen on all interfaces (IPv4 + IPv6) to avoid loopback mismatch
-server.listen(0, () => {
+// Loopback only. The page writes --selection on POST /save with no authentication, so
+// binding every interface let any peer on the network overwrite the entry-point selection.
+// serverURL is 127.0.0.1, so the browser never needs another address.
+server.listen(0, '127.0.0.1', () => {
     const port = server.address().port;
     serverURL = `http://127.0.0.1:${port}`;
     console.log(`\nFunction selector running at ${serverURL}`);
