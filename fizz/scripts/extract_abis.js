@@ -40,7 +40,9 @@ function readFoundryPaths(projectRoot) {
             continue;
         }
 
-        const keyValueMatch = line.match(/^(src|out)\s*=\s*"([^"]+)"/);
+        // TOML allows single- or double-quoted strings; only the double-quoted form
+        // used to be read, so `out = 'build'` silently fell back to the default dir.
+        const keyValueMatch = line.match(/^(src|out)\s*=\s*["']([^"']+)["']/);
         if (!keyValueMatch) continue;
 
         const [, key, value] = keyValueMatch;
@@ -167,8 +169,10 @@ function resolveArtifactPath(fileRelPath, contractName) {
     const hardhatPath = path.join(artifactsDir, fileRelPath, `${contractName}.json`);
     if (fs.existsSync(hardhatPath)) return hardhatPath;
 
-    // Hardhat alternate: artifacts/contracts/...
-    const hardhatAltPath = path.join(projectRoot, 'artifacts', 'contracts', fileRelPath, `${contractName}.json`);
+    // Hardhat alternate: the project's own artifacts/ dir, when --out points elsewhere.
+    // fileRelPath is already project-relative (e.g. 'contracts/Token.sol'), so adding
+    // another 'contracts' segment produced artifacts/contracts/contracts/... and never matched.
+    const hardhatAltPath = path.join(projectRoot, 'artifacts', fileRelPath, `${contractName}.json`);
     if (fs.existsSync(hardhatAltPath)) return hardhatAltPath;
 
     return null;
@@ -248,19 +252,28 @@ function extractContractData(fileRelPath, contractName, sourcePath) {
 /**
  * Check if a directory contains at least one .json artifact file (not in build-info).
  */
-function hasValidArtifacts(dir) {
+function hasValidArtifacts(dir, depth = 0) {
     if (!fs.existsSync(dir)) return false;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return false;
+    }
+    for (const entry of entries) {
         if (entry.name === 'build-info') continue;
         const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-            for (const sub of fs.readdirSync(fullPath, { withFileTypes: true })) {
-                if (sub.isFile() && sub.name.endsWith('.json')) {
-                    // Quick sanity: file must have non-trivial size (not empty dir artifact)
-                    const stat = fs.statSync(path.join(fullPath, sub.name));
-                    if (stat.size > 100) return true;
-                }
+        if (entry.isFile()) {
+            if (entry.name.endsWith('.json')) {
+                // Quick sanity: file must have non-trivial size (not empty dir artifact)
+                try {
+                    if (fs.statSync(fullPath).size > 100) return true;
+                } catch { /* unreadable entry — keep looking */ }
             }
+        } else if (entry.isDirectory() && depth < 6) {
+            // Recurse: the Hardhat layout is artifacts/<source path>/<Contract>.json, which is
+            // already three levels deep for a flat contracts/ dir and deeper for nested ones.
+            if (hasValidArtifacts(fullPath, depth + 1)) return true;
         }
     }
     return false;
