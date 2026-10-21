@@ -315,6 +315,7 @@ Tell the user:
 - For newly added functions without handler bodies: re-run `fizz` Step 7 for just those contracts, or use the `fizz-convert` skill if the user also wants to regenerate properties for them.
 - For quarantined properties: either rewrite them manually (flip `[~]` back to `[ ]` in `PROPERTIES.md` and run `/fizz-convert`), or leave them quarantined.
 - For source-changed contracts without ABI drift: read the diff manually to confirm existing properties still encode the intended semantics.
+- **Only if `{SUITE_DIR}/symbolic/` exists** (the optional proof harness from `fizz` Step 10.5), and only when a source hash actually changed: add one line — "symbolic proofs cover the previous bytecode; re-run `{SUITE_DIR}/symbolic/` to restore them." A proof is about one build, so any edit to the proven functions invalidates every result. Do not re-run them yourself, and say nothing at all when that directory is absent.
 
 ---
 
