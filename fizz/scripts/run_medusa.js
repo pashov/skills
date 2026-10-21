@@ -17,7 +17,7 @@
  *   --meta-dir            fizz_data
  *   --min-seconds         60
  *   --max-stagnant-lines  5
- *   --grace-seconds       5
+ *   --grace-seconds       60
  *   --timeout             300
  *   --coverage-mode       false (plateau detection disabled; coverage report path printed but never auto-opened)
  *   --logs                false (live log viewer + coverage report print their URLs, but the browser is not auto-opened)
@@ -39,7 +39,14 @@ const projectRoot = path.resolve(args[0]);
 let metaRelDir = 'fizz_data';
 let minSeconds = 60;
 let maxStagnantLines = 5;
-let graceSeconds = 5;
+// Medusa's graceful shutdown is dominated by AnalyzeSourceCoverage, which walks every
+// contract in the whole compilation (not just the fuzzed ones) and is therefore driven by
+// codebase size, not corpus size. Measured SIGINT -> exit on real projects: prb-math
+// (107 sources) 1.8s, Balancer reclamm (220 sources, 134 contracts) 29.9s. The old 5s
+// default killed medusa mid-analysis on anything of normal audit size, which loses the
+// coverage report entirely; a kill during the report write instead truncates it, because
+// WriteHTMLReport/WriteLCOVReport write straight to the final path with no temp+rename.
+let graceSeconds = 60;
 let timeoutSeconds = 300;
 let logFilePath = null;
 let coverageMode = false;
@@ -166,17 +173,36 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
     let stderrBuffer = '';
     let childExited = false;
 
-    function parseStatusLine(line) {
+    // Medusa colourises its status lines unless `logging.noColor` is set, which puts an
+    // escape sequence between every label and its value. Strip them before matching, but
+    // only for parsing - the mirrored output keeps its colour.
+    const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
+
+    // Medusa's formatDuration prints `42s` under a minute, `6m32s` under an hour and
+    // `1h06m32s` beyond that. Matching only the `%ds` form meant elapsed stopped parsing
+    // at 60s, which is also the default --min-seconds, so the plateau check could never
+    // reach its own threshold.
+    function parseElapsedSeconds(line) {
+        const match = line.match(/elapsed:\s*(?:(\d+)h)?(?:(\d+)m)?(\d+)s/i);
+        if (!match) return null;
+
+        const [, hours, minutes, seconds] = match;
+        return Number(hours || 0) * 3600 + Number(minutes || 0) * 60 + Number(seconds);
+    }
+
+    function parseStatusLine(rawLine) {
         if (!coverageMode) return;
 
-        const elapsedMatch = line.match(/elapsed:\s*([\d,]+)s/i);
-        const branchesMatch = line.match(/branches hit:\s*([\d,]+)/i);
+        const line = rawLine.replace(ANSI_PATTERN, '');
 
-        if (!elapsedMatch || !branchesMatch) return;
+        const elapsedSeconds = parseElapsedSeconds(line);
+        // `branches hit:` on medusa <= 1.4.1, renamed to `branches:` in 1.5.0.
+        const branchesMatch = line.match(/branches(?:\s+hit)?:\s*([\d,]+)/i);
+
+        if (elapsedSeconds === null || !branchesMatch) return;
 
         sawBranchesMetric = true;
 
-        const elapsedSeconds = Number(elapsedMatch[1].replace(/,/g, ''));
         const branchesHit = Number(branchesMatch[1].replace(/,/g, ''));
         if (!Number.isFinite(elapsedSeconds) || !Number.isFinite(branchesHit)) return;
 
@@ -291,7 +317,7 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
         }
 
         if (coverageMode && !sawBranchesMetric) {
-            writeStderr(`${TAG} No \`branches hit\` progress lines were observed; Medusa was not auto-stopped by plateau detection.\n`);
+            writeStderr(`${TAG} No branch-coverage progress lines were observed; Medusa was not auto-stopped by plateau detection.\n`);
         }
 
         const lcovPath = path.join(projectRoot, metaRelDir, 'corpus_medusa', 'coverage', 'lcov.info');
