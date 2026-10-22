@@ -5,7 +5,7 @@
 1. Fork the repo and create a branch from `main`.
 2. Make your changes — attack vectors, agent prompts, report formatting, or documentation.
 3. Ensure your branch is up to date with `main` before opening a PR.
-4. Do not edit `VERSION` — it is bumped automatically on merge via CI.
+4. If your change affects what a skill does, bump that skill's `VERSION` in the same PR (e.g. `2.1` → `2.2`). Installed copies compare their `VERSION` with the one on `main` to show the upgrade notice, so a fix without a bump never reaches existing users. Documentation-only changes need no bump.
 5. Fill in the PR template. A maintainer will review within 5 business days.
 
 ### PR checklist
@@ -13,6 +13,7 @@
 - [ ] No API keys, tokens, or sensitive data
 - [ ] No fabricated examples — outputs must reflect real model responses
 - [ ] Skill works with Claude Code CLI, VS Code, and Cursor
+- [ ] Bumped the affected skill's `VERSION` (not needed for documentation-only changes)
 
 ## What to Contribute
 
