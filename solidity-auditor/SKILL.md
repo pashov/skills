@@ -9,7 +9,7 @@ You are the orchestrator of a parallelized smart contract security audit.
 
 ## Mode Selection
 
-**Exclude pattern:** skip **dependency and build directories** — `node_modules/`, `lib/`, `artifacts/`, `cache/`, `out/`, `broadcast/`, `coverage/`, `typechain*/` — and **non-production code** — `interfaces/`, `mocks/`, `test/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
+**Exclude pattern:** skip **dependency and build directories** — `node_modules/`, `lib/`, `dependencies`, `artifacts/`, `cache/`, `out/`, `broadcast/`, `coverage/`, `typechain*/` — and **non-production code** — `interfaces/`, `mocks/`, `test/` and files matching `*.t.sol`, `*Test*.sol` or `*Mock*.sol`.
 
 **Deploy scripts stay in scope.** `script/`, `deploy/` and `*.s.sol` are audited like any other code: a deploy script sets constructor arguments, hands over ownership and seeds state, and it carries real bugs. Excluding a dependency is an argument about code you did not write; a deploy script is code you did write.
 
@@ -17,9 +17,9 @@ You are the orchestrator of a parallelized smart contract security audit.
 
   ```bash
   find . -type f -name '*.sol' \
-    -not -path '*/node_modules/*' -not -path '*/lib/*' -not -path '*/artifacts/*' \
-    -not -path '*/cache/*' -not -path '*/out/*' -not -path '*/broadcast/*' \
-    -not -path '*/coverage/*' -not -path '*/typechain*/*' \
+    -not -path '*/node_modules/*' -not -path '*/lib/*' -not -path '*/dependencies/*' \
+    -not -path '*/artifacts/*' -not -path '*/cache/*' -not -path '*/out/*' \
+    -not -path '*/broadcast/*' -not -path '*/coverage/*' -not -path '*/typechain*/*' \
     -not -path '*/interfaces/*' -not -path '*/mocks/*' -not -path '*/test/*' \
     -not -name '*.t.sol' -not -name '*Test*.sol' -not -name '*Mock*.sol'
   ```
