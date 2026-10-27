@@ -137,16 +137,21 @@ function findContracts(filePath) {
 function mapInputs(inputs) {
     return (inputs || []).map((input) => {
         let internalType = input.internalType || input.type;
-        let type = input.type.includes('[]') ? 'array' : input.type;
+        // Fixed-size arrays too: `uint256[8]` kept its raw type and got no data location.
+        const isArray = /\[\d*\]$/.test(input.type);
+        let type = isArray ? 'array' : input.type;
 
+        // The element prefix is stripped for arrays as well, but only a scalar becomes
+        // 'contract' / 'enum': those map to a single address / uint8, which would turn
+        // `IToken[] tokens` into `address tokens`.
         if (internalType.startsWith('struct ')) {
             internalType = internalType.slice(7);
         } else if (internalType.startsWith('contract ')) {
             internalType = internalType.slice(9);
-            type = 'contract';
+            if (!isArray) type = 'contract';
         } else if (internalType.startsWith('enum ')) {
             internalType = internalType.slice(5);
-            type = 'enum';
+            if (!isArray) type = 'enum';
         }
 
         return { name: input.name, type, internalType };
