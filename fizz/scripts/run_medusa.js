@@ -29,6 +29,35 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { startLogViewer } = require('./lib/log-viewer');
 
+/**
+ * Read `src` from foundry.toml ([profile.default] or top level), defaulting to 'src'.
+ * A Hardhat project keeps its sources in contracts/ (ensure_foundry.sh writes
+ * src = "contracts"), so the coverage summary cannot assume a src/ prefix.
+ */
+function readFoundrySrc(projectRoot) {
+    const foundryToml = path.join(projectRoot, 'foundry.toml');
+    let src = 'src';
+    if (!fs.existsSync(foundryToml)) return src;
+
+    let section = '';
+    for (const rawLine of fs.readFileSync(foundryToml, 'utf-8').split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+
+        const sectionMatch = line.match(/^\[(.+)\]$/);
+        if (sectionMatch) {
+            section = sectionMatch[1].trim();
+            continue;
+        }
+
+        const srcMatch = line.match(/^src\s*=\s*["']([^"']+)["']/);
+        if (srcMatch && (section === '' || section === 'profile.default')) {
+            src = srcMatch[1];
+        }
+    }
+    return src;
+}
+
 const args = process.argv.slice(2);
 if (args.length === 0 || args[0] === '--help') {
     console.log('Usage: node run_medusa.js <PROJECT_ROOT> [--meta-dir <dir>] [--min-seconds <n>] [--max-stagnant-lines <n>] [--grace-seconds <n>] [--timeout <n>] [--log-file <path>] [--coverage-mode] [--logs]');
@@ -105,6 +134,9 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
         const data = fs.readFileSync(lcovPath, 'utf8');
         const parts = data.split('end_of_record');
         const results = [];
+        // Normalise './contracts', 'contracts/' and absolute paths to one project-relative dir.
+        const srcRel = path.relative(rootDir, path.resolve(rootDir, readFoundrySrc(rootDir)));
+        const srcLabel = (srcRel || '.').split(path.sep).join('/');
 
         for (const part of parts) {
             const lines = part.trim().split('\n');
@@ -113,7 +145,7 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
 
             const fname = sfLine.slice(3).trim();
             const rel = path.relative(rootDir, fname);
-            if (!rel.startsWith('src' + path.sep) || rel.includes('node_modules')) continue;
+            if ((srcRel && !rel.startsWith(srcRel + path.sep)) || rel.includes('node_modules')) continue;
 
             const daLines = lines.filter(l => l.startsWith('DA:'));
             if (daLines.length === 0) continue;
@@ -140,7 +172,7 @@ startLogViewer('Medusa', '#22c55e', { open: openLogs }).then(({ viewerState, app
             }
         }
 
-        writeStderr(`\n${TAG} Coverage summary (src/ contracts):\n`);
+        writeStderr(`\n${TAG} Coverage summary (${srcLabel}/ contracts):\n`);
         for (const { name, pct, lh, lf } of results) {
             const flag = pct < target ? ' !' : '  ';
             writeStderr(`${TAG}${flag} ${String(pct).padStart(3)}%  ${name.padEnd(maxName)}  (${lh}/${lf} lines)\n`);
