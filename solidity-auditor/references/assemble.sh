@@ -65,7 +65,7 @@ fi
 # run files in PASS order. A plain glob puts run-10 before run-2, which is a real 10-pass bug.
 runs=()
 while IFS= read -r f; do runs+=("$f"); done < <(
-  ls "$dir"/run-*.md 2>/dev/null | sed 's/.*run-\([0-9]*\)\.md/\1 &/' | sort -n | cut -d' ' -f2)
+  ls "$dir"/run-*.md 2>/dev/null | sed 's/.*run-\([0-9]*\)\.md/\1 &/' | sort -n | cut -d' ' -f2-)
 N=${#runs[@]}
 
 # ---------------------------------------------------------------- index every block
@@ -93,6 +93,7 @@ N=${#runs[@]}
 : > "$work/index.tsv"
 for f in ${runs[@]+"${runs[@]}"}; do
   awk -v F="$f" '
+    BEGIN { fpass = F; sub(/.*run-/, "", fpass); sub(/\.md$/, "", fpass) }   # pass= missing: the file name says it
     /^<!--RUN / { line=$0; sub(/[[:space:]]*-->[[:space:]]*$/, "", line)
                   n=split(line, a, /[[:space:]]+/)
                   for (i=2; i<=n; i++) { eq=index(a[i],"="); if (substr(a[i],1,eq-1)=="pass") pass=substr(a[i],eq+1) } }
@@ -130,10 +131,16 @@ for f in ${runs[@]+"${runs[@]}"}; do
       lbody = l
     }
     /^<!--\/F-->/ && start {
+      # key and kind are what dedup and the emitter split on. A block missing either, or whose
+      # kind is neither FINDING nor LEAD, is NOT indexed: the structure check below counts it
+      # as unreadable and says so in the report. Indexed, a bad kind was filtered out of both
+      # sections without a word, and an empty key shifted every later column.
+      if (key == "" || (kind != "FINDING" && kind != "LEAD")) { start = 0; kind = ""; next }
+      if (agents == "") agents = "-"
       if (title == "") title = "-"
       if (loc   == "") loc   = "-"
       if (lbody == "") lbody = "-"
-      print key "\t" conf "\t" kind "\t" agents "\t" F "\t" pass "\t" start "\t" NR "\t" (start+6) "\t" (NR-1) "\t" title "\t" loc "\t" lbody
+      print key "\t" conf "\t" kind "\t" agents "\t" F "\t" (pass != "" ? pass : fpass) "\t" start "\t" NR "\t" (start+6) "\t" (NR-1) "\t" title "\t" loc "\t" lbody
       start = 0; kind = ""
     }
   ' "$f" >> "$work/index.tsv"
@@ -329,6 +336,12 @@ if [ "$memory_on" = 1 ]; then
     if [ -s "$work/keys-left.txt" ]; then
       say "| Scans | Kind | Location | Title |"
       say "|---|---|---|---|"
+      # No name map is the same as an empty one: every segment prints as stored.
+      names="$dir/source-names.tsv"
+      if [ ! -f "$names" ]; then
+        echo "assemble.sh: $names is missing — locations print as stored" >&2
+        names=/dev/null
+      fi
       awk -F'\t' '
         FILENAME==ARGV[1] { nm[$1]=$2; next }
         FILENAME==ARGV[2] { if (FNR>1) { sc[$1]=$3; ti[$1]=$5; ki[$1]=$6 } ; next }
@@ -338,7 +351,7 @@ if [ "$memory_on" = 1 ]; then
           f = (p[2] in nm) ? nm[p[2]] : p[2]
           print "| " sc[$1] " | " ki[$1] " | `" c "." f "` | " ti[$1] " |"
         }
-      ' "$dir/source-names.tsv" "$dir/memory-before.tsv" "$work/keys-left.txt" >> "$R"
+      ' "$names" "$dir/memory-before.tsv" "$work/keys-left.txt" >> "$R"
     else
       say "_None — every record in the ledger was raised again by this scan._"
     fi
