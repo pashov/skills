@@ -498,7 +498,8 @@ async function confirm() {
   const changedFromDefault = buildSelectionFingerprint(filtered) !== defaultFingerprint;
 
   try {
-    const res = await fetch(SERVER_URL + '/save', {
+    // Relative URL: always same-origin, whichever loopback name the page was opened on.
+    const res = await fetch('/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ selection: filtered, changedFromDefault }),
@@ -545,19 +546,27 @@ if (autoMode) {
 
 const outputPath = selectionPath;
 
-const server = http.createServer((req, res) => {
-    // CORS headers — needed when browser opens page on a different loopback variant
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+// The page and /save come from this one server, so the browser never needs CORS. Dropping
+// the wildcard header is not enough on its own: a cross-site text/plain POST skips the
+// preflight and its body is still parsed. So accept only a loopback Host (blocks DNS
+// rebinding) and, when the browser sends an Origin, only this page's own origin.
+const LOOPBACK_HOST = /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/;
 
-    if (req.method === 'OPTIONS') {
-        res.writeHead(204);
-        res.end();
+function isSameOrigin(req) {
+    const host = req.headers.host || '';
+    if (!LOOPBACK_HOST.test(host)) return false;
+    const origin = req.headers.origin;
+    return !origin || origin === `http://${host}`;
+}
+
+const server = http.createServer((req, res) => {
+    console.log(`  ${req.method} ${req.url}`);
+
+    if (!isSameOrigin(req)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('Forbidden: cross-origin request');
         return;
     }
-
-    console.log(`  ${req.method} ${req.url}`);
 
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
