@@ -131,48 +131,65 @@ const ADDRESS_TYPES = new Set(['address', 'contract']);
 /**
  * Build the dispatcher parameter list and a per-function arg-mapping for secondary functions.
  *
- * Strategy: numeric/bool/enum/other value types share a pool of uint256 slots; address/contract
- * types share a separate pool of address slots. For each function the max pool usage across all
- * secondary functions determines the total slot count. Slots are ordered: uint256 slots first,
- * then address slots (matching the handler-patterns.md example).
+ * Strategy: value types a uint256 converts to (bool, enum, uintN, intN, bytesN) share a pool of
+ * uint256 slots; address/contract types share a separate pool of address slots. Any other type
+ * (string, bytes, arrays, structs) has no uint256 conversion, so each such type gets its own pool
+ * of slots declared with that exact type. For each pool the max usage across all secondary
+ * functions determines its slot count. Slots are ordered: uint256 slots first, then address slots
+ * (matching the handler-patterns.md example), then the other pools in first-seen order.
  *
  * Returns:
- *   { paramStr, slotCount, funcArgExprs }
+ *   { paramStr, funcArgExprs }
  *   - paramStr    — Solidity parameter string for the dispatcher (after `uint8 selector, `)
- *   - slotCount   — total number of generic args (uint256 + address)
  *   - funcArgExprs(func) — function that returns the call-argument expression array for a given func
  */
 function buildDispatcherSignature(secondaryFuncs) {
-    let maxUint256 = 0;
-    let maxAddress = 0;
-
-    // Count max slots of each kind needed by any single secondary function
-    for (const func of secondaryFuncs) {
-        let u = 0, a = 0;
-        for (const inp of func.inputs) {
-            if (ADDRESS_TYPES.has(inp.type)) a++;
-            else u++;
+    // Pool a parameter draws from: 'uint256', 'address', or its own declared type ("string memory").
+    function slotKind(inp) {
+        if (ADDRESS_TYPES.has(inp.type)) return 'address';
+        if (inp.type === 'bool' || inp.type === 'enum' || /^u?int\d+$/.test(inp.type) || /^bytes\d+$/.test(inp.type)) {
+            return 'uint256';
         }
-        if (u > maxUint256) maxUint256 = u;
-        if (a > maxAddress) maxAddress = a;
+        const decl = toSolidityParam(inp, 0);
+        return decl.slice(0, decl.lastIndexOf(' '));
     }
 
-    // Build param list: arg0..argN-1 are uint256, argN..argM are address
+    // Count max slots of each kind needed by any single secondary function
+    const maxByKind = new Map([['uint256', 0], ['address', 0]]);
+    for (const func of secondaryFuncs) {
+        const used = new Map();
+        for (const inp of func.inputs) {
+            const kind = slotKind(inp);
+            used.set(kind, (used.get(kind) || 0) + 1);
+        }
+        for (const [kind, n] of used) maxByKind.set(kind, Math.max(maxByKind.get(kind) || 0, n));
+    }
+
+    // Build param list: uint256 slots, then address slots, then one run per other type
     const params = [];
-    for (let i = 0; i < maxUint256; i++) params.push(`uint256 arg${i}`);
-    for (let i = 0; i < maxAddress; i++) params.push(`address arg${maxUint256 + i}`);
+    const firstSlot = new Map();
+    for (const [kind, n] of maxByKind) {
+        firstSlot.set(kind, params.length);
+        for (let i = 0; i < n; i++) params.push(`${kind} arg${params.length}`);
+    }
     const paramStr = params.join(', ');
 
     function funcArgExprs(func) {
-        let uIdx = 0, aIdx = 0;
+        const nextIdx = new Map();
         return func.inputs.map(inp => {
-            if (ADDRESS_TYPES.has(inp.type)) {
-                return `arg${maxUint256 + aIdx++}`;
-            }
-            const slot = `arg${uIdx++}`;
+            const kind = slotKind(inp);
+            const idx = nextIdx.get(kind) || 0;
+            nextIdx.set(kind, idx + 1);
+            const slot = `arg${firstSlot.get(kind) + idx}`;
+            if (kind !== 'uint256') return slot;
             if (inp.type === 'bool') return `${slot} > 0`;
             if (inp.type === 'enum') return `uint8(${slot})`;
             if (/^uint\d+$/.test(inp.type) && inp.type !== 'uint256') return `${inp.type}(${slot})`;
+            // solc allows a width change or a sign/kind change per cast, not both at once
+            if (inp.type === 'int256') return `int256(${slot})`;
+            if (/^int\d+$/.test(inp.type)) return `${inp.type}(int256(${slot}))`;
+            if (inp.type === 'bytes32') return `bytes32(${slot})`;
+            if (/^bytes\d+$/.test(inp.type)) return `${inp.type}(bytes32(${slot}))`;
             return slot;
         });
     }
