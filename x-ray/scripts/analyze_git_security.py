@@ -381,12 +381,31 @@ def find_source_files(repo: str, src_dir: str) -> list[str]:
 def run_git(repo: str, *args: str, allow_fail: bool = False) -> str:
     cmd = ["git", "-C", repo] + list(args)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        # git writes UTF-8. Without an explicit encoding, text=True decodes with the locale
+        # codec (cp1252 on Windows), and one commit subject like "修复" raises in the reader thread.
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+        )
         return result.stdout
     except subprocess.CalledProcessError:
         if allow_fail:
             return ""
         raise
+
+
+def _numstat_path(path: str) -> str:
+    """The post-rename path of a --numstat entry.
+
+    git prints a rename as `src/{Old.sol => core/New.sol}` or `old.sol => new.sol`. Read
+    as-is, the path ends in `}` (or carries the old name), so the file is never classified
+    as source and a fix that also moves a file loses its source signals.
+    """
+    m = re.match(r"(.*)\{(.*) => (.*)\}(.*)", path)
+    if m:
+        return re.sub(r"/{2,}", "/", m.group(1) + m.group(3) + m.group(4))
+    if " => " in path:
+        return path.split(" => ", 1)[1]
+    return path
 
 
 def parse_git_log(repo: str, src_dir: str) -> list[Commit]:
@@ -420,7 +439,7 @@ def parse_git_log(repo: str, src_dir: str) -> list[Commit]:
                     deleted = int(parts[1]) if parts[1] != "-" else 0
                 except ValueError:
                     continue
-                path = parts[2]
+                path = _numstat_path(parts[2])
                 is_src, is_tst = classify_path(path, src_dir)
                 current.files.append(FileChange(
                     path=path, added=added, deleted=deleted,
@@ -651,7 +670,7 @@ def find_fix_candidates(
 
 def _read_file_safe(path: str) -> str:
     try:
-        with open(path, "r", errors="replace") as f:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
     except (OSError, IOError):
         return ""
@@ -852,7 +871,7 @@ def _extract_pragmas(sol_dir: str) -> list[str]:
             if not fname.endswith(".sol"):
                 continue
             try:
-                with open(os.path.join(root, fname), "r", errors="replace") as f:
+                with open(os.path.join(root, fname), "r", encoding="utf-8", errors="replace") as f:
                     for line in f:
                         m = re.match(r"\s*pragma\s+solidity\s+(.+?)\s*;", line)
                         if m:
@@ -899,7 +918,7 @@ def analyze_forked_deps(repo: str) -> dict:
     active_submodules = set()
     if os.path.isfile(gitmodules_path):
         try:
-            with open(gitmodules_path, "r") as f:
+            with open(gitmodules_path, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
                     m = re.match(r"\s*path\s*=\s*(.+)", line)
                     if m:
@@ -1013,7 +1032,7 @@ def find_tech_debt(source_files: list[str], repo: str) -> dict:
     for rel_path in source_files:
         full_path = os.path.join(repo, rel_path)
         try:
-            with open(full_path, "r", errors="replace") as f:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
         except (OSError, IOError):
             continue
@@ -1181,7 +1200,7 @@ def detect_src_dir(repo: str) -> str:
     toml_path = os.path.join(repo, "foundry.toml")
     if os.path.isfile(toml_path):
         try:
-            with open(toml_path, "r") as f:
+            with open(toml_path, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
                     m = re.match(r'\s*src\s*=\s*["\'](.+?)["\']', line)
                     if m:
