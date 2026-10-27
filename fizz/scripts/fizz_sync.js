@@ -433,7 +433,9 @@ function diffSnapshots(oldSnap, newSnap) {
             const content = fs.readFileSync(file, 'utf8');
             for (const dead of removedHandlerMethods) {
                 if (dead.startsWith('__contract_removed__:')) continue;
-                const re = new RegExp(`\\b${dead}\\s*\\(`);
+                // Secondary-tier stubs are `_<instance>_<fn>`. `\b` never matches between that
+                // leading `_` and the name (both are word characters), so allow one `_` prefix.
+                const re = new RegExp(`(?:^|[^A-Za-z0-9_$])_?${dead}\\s*\\(`, 'm');
                 if (re.test(content)) {
                     propDrift.push({
                         file: path.relative(projectRoot, file),
