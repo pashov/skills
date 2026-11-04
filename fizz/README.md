@@ -43,3 +43,4 @@ update skill to latest version
 - **Run guided on first use.** Reviewing entry points and properties once shows exactly what the suite covers — then switch to automatic.
 - **Keep it in sync.** After changing contracts, run `/fizz-sync` to update the suite instead of regenerating it.
 - **Write properties in English.** Drop plain-English invariants into `PROPERTIES.md` and `/fizz-convert` turns them into Solidity.
+- **Steer Echidna when it stalls.** With Echidna >= 2.4, `--steer` runs the campaign with Echidna's MCP server: the agent watches coverage while it runs and, when it plateaus, tests call orderings and points the fuzzer at code it has not reached. See [references/echidna-mcp.md](references/echidna-mcp.md).

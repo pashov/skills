@@ -25,6 +25,7 @@ Use `Echidna` and `Medusa` for invariant campaigns. Use `Foundry` for compilatio
 - `META_DIR`: `fizz_data` relative to `PROJECT_ROOT`. Pass `--meta-dir` to metadata steps.
 - Optional contract arguments narrow handler generation to specific contracts.
 - `--no-invariants` skips Step 9 only.
+- `--steer` runs the Step 10 campaign on Echidna with its MCP server and steers it when coverage plateaus (Echidna >= 2.4). `--no-steer` skips it without asking. Default: offered once in guided mode when Echidna is chosen, skipped in automatic mode. See "Steering the Echidna Campaign" in Step 10.
 - `--max` (or `--opus`, or "max quality") upgrades every subagent in this run from Sonnet to Opus. See "Subagent Model" below.
 - `--guided` / `--automatic` selects the run mode. See "Run Mode" below.
 
@@ -32,8 +33,8 @@ Use `Echidna` and `Medusa` for invariant campaigns. Use `Foundry` for compilatio
 
 The skill runs in one of two modes, resolved once at the start of the run and reused for every checkpoint below:
 
-- `{MODE} = "guided"` — the parent agent pauses for user input at key checkpoints: Step 3 (additional docs), Step 4 (interactive function picker UI), Step 4.5 (cost confirmation), Step 6 (setup review), Step 8 (per-cycle coverage decision), Step 9c (property review), Step 10 (fuzzer choice).
-- `{MODE} = "automatic"` — the parent agent never pauses. Step 4 runs with `--auto`, Step 8 loops up to 3 coverage cycles then proceeds, Step 10 defaults to Medusa, and the cost estimate from Step 4.5 is printed but not gated on user confirmation.
+- `{MODE} = "guided"` — the parent agent pauses for user input at key checkpoints: Step 3 (additional docs), Step 4 (interactive function picker UI), Step 4.5 (cost confirmation), Step 6 (setup review), Step 8 (per-cycle coverage decision), Step 9c (property review), Step 10 (fuzzer choice, plus a one-time steering offer when Echidna >= 2.4 is chosen).
+- `{MODE} = "automatic"` — the parent agent never pauses. Step 4 runs with `--auto`, Step 8 loops up to 3 coverage cycles then proceeds, Step 10 defaults to Medusa (or Echidna with steering when `--steer` is passed), and the cost estimate from Step 4.5 is printed but not gated on user confirmation.
 
 ### Resolving `{MODE}`
 
@@ -108,6 +109,14 @@ Run sequentially:
    Echidna install guide: `https://secure-contracts.com/program-analysis/echidna/introduction/installation.html`
 10. If `medusa --version` fails, stop here. Medusa is required before proceeding with the rest of the workflow.
 11. If `echidna --version` fails but Foundry and Medusa are installed, you may continue, but keep the installation recommendation in the user-facing summary because Echidna is still expected for the full workflow.
+12. Resolve `{ECHIDNA_MCP_AVAILABLE}`: whether the Echidna campaign in Step 10 can be steered over MCP. It needs Echidna >= 2.4:
+
+    ```bash
+    echidna --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 \
+      | awk -F. '{ if ($1 > 2 || ($1 == 2 && $2 >= 4)) print "echidna-mcp: available"; else print "echidna-mcp: unavailable (need >= 2.4)" }'
+    ```
+
+    Set `{ECHIDNA_MCP_AVAILABLE} = true` only when this prints `available`. Do not print anything about it here and do not treat it as a blocker; just carry it forward.
 
 ## Step 2: Compile And Extract
 
@@ -482,6 +491,7 @@ After invariant generation and validation, run a full fuzzing campaign to find p
 
 - `{MODE} = "automatic"`: default to **Medusa** — faster with multi-worker parallelism and better suited for initial runs.
 - `{MODE} = "guided"`: ask the user *"Which fuzzer for this campaign — Medusa (default, parallel workers) or Echidna?"* and use their answer. If they express no preference, default to Medusa.
+- `--steer` with `{ECHIDNA_MCP_AVAILABLE} = true`: use **Echidna** in either mode, and steer it (see "Steering the Echidna Campaign" below). If `{ECHIDNA_MCP_AVAILABLE} = false`, say once that steering needs Echidna >= 2.4 and fall back to the normal selection.
 
 Do not run both fuzzers simultaneously — this consumes excessive resources and can cause system instability or crashes. Campaign Iteration (below) is where a complementary run on the other fuzzer is offered.
 
@@ -509,6 +519,28 @@ cryticArgs: ["--compile-libraries=(Lib1,0xf1), (Lib2,0xf2)"]
 ```
 
 Replace `Lib1`, `Lib2` with the actual library names and `0xf1`, `0xf2` with the desired deployment addresses.
+
+### Steering the Echidna Campaign (Optional — Echidna MCP)
+
+**Off by default.** It runs only when Echidna is the fuzzer, `{ECHIDNA_MCP_AVAILABLE} = true`, and either `--steer` was passed or, in guided mode, the user accepts this offer, asked **once** right after they choose Echidna:
+
+> "Echidna 2.4 can serve its campaign over MCP, so I can watch coverage while it runs and, when it stalls, test call orderings and push the fuzzer towards code it has not reached. The campaign keeps running either way, and any violation is still found and reported by Echidna itself. Steer it?"
+
+Never re-ask. `--no-steer` skips the offer.
+
+When it runs:
+
+1. Read [echidna-mcp.md](./references/echidna-mcp.md) in full before calling any tool.
+2. Start the campaign with the server enabled, as a tracked background job, with a timeout long enough to steer (at least 1800 s):
+
+   ```
+   node {SKILL_PATH}/scripts/run_echidna.js {PROJECT_ROOT} --meta-dir {META_DIR} --timeout 1800 --server 8080
+   ```
+
+3. Wait for `MCP server listening on http://127.0.0.1:8080/mcp` in the output, then drive the campaign with `node {SKILL_PATH}/scripts/echidna_mcp.js <tool> --port 8080 ...`, following the steering loop in the reference: poll `status` about once a minute, act only on a coverage plateau, test orderings with `execute_sequence` before injecting them, `clear_fuzz_priorities` before each new injection, and stop after five rounds.
+4. If `sample` shows a handler reverting on essentially every call, fix the handler instead of injecting, then restart the campaign.
+5. Append each round to `{PROJECT_ROOT}/{META_DIR}/steering-log.md`.
+6. Keep waiting for the wrapper to exit as usual. Results are read from the campaign log exactly as below; an `assertion_failed` seen only through `execute_sequence` is not a violation until the campaign reports it.
 
 ### Interpreting Results
 
@@ -568,7 +600,7 @@ If the campaign in Step 10 found property violations, generate a Foundry reprodu
 
 After validation succeeds, spawn the Report Writer subagent to synthesize the final report. Read `{SKILL_PATH}/agents/report-writer.md`, replace `{SKILL_PATH}` with the actual `{SKILL_PATH}`, `{PROJECT_ROOT}` with the actual `{PROJECT_ROOT}`, `{META_DIR}` with the actual `{META_DIR}`, and `{SUITE_DIR}` with the actual `{SUITE_DIR}`, then spawn as a `general-purpose` agent with `model: "{AGENT_MODEL}"`.
 
-The agent reads the campaign outputs (coverage, corpus, `medusa-run.log`, `PROPERTIES.md`, `Properties.sol`, handler files, open TODOs) and writes `{PROJECT_ROOT}/{META_DIR}/report.md`.
+The agent reads the campaign outputs (coverage, corpus, `medusa-run.log`, `PROPERTIES.md`, `Properties.sol`, handler files, open TODOs) and writes `{PROJECT_ROOT}/{META_DIR}/report.md`. If the Echidna campaign was steered, it also reads `{PROJECT_ROOT}/{META_DIR}/steering-log.md` and adds the optional Campaign Steering section.
 
 The report-writer agent will also print the report content to the conversation (so the user sees it inline) and remind the user of the commands to run campaigns manually:
 

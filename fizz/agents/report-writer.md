@@ -26,6 +26,7 @@ Read these files (skip gracefully if any are missing and write `N/A` in the corr
 - `{PROJECT_ROOT}/{SUITE_DIR}/Base.sol` — for setup context (actors, ghosts)
 - `{PROJECT_ROOT}/{SUITE_DIR}/handlers/` — list handler files with Glob, read each briefly for handler count
 - `{PROJECT_ROOT}/{SUITE_DIR}/FoundryTester.sol` — for violation repro test results (look for `test_repro_*` functions and whether they passed validation)
+- `{PROJECT_ROOT}/{META_DIR}/steering-log.md` — rounds of MCP steering, **only if the Echidna campaign was steered**. Usually absent; when it is, omit the Campaign Steering section entirely (do not write `N/A`, do not mention steering).
 
 If the paths above are wrong for this project (e.g. a different fuzzer was used, or files live under a different meta dir), adapt — prefer reading whatever exists over erroring out.
 
@@ -82,6 +83,15 @@ For each distinct violation root cause (NOT each reproduction), write a sub-sect
 - A violated **EXPLORATORY** property is an inferred assumption that did not hold → default to `needs human review`; only call it `protocol bug` when the root cause clearly shows real value loss / broken safety, and only `test harness false positive` when the inferred property was simply too strong (say so explicitly).
 
 If multiple stored failures share the same root cause, group them under one sub-section and note the count.
+
+### Campaign Steering
+[OMIT THIS ENTIRE SUB-SECTION unless `{PROJECT_ROOT}/{META_DIR}/steering-log.md` exists.]
+
+| Round | Plateau (coverage, s since last) | Unreached code | Action | Coverage after |
+|-------|----------------------------------|----------------|--------|----------------|
+| 1 | 1011, 93 s | `Vault.lock` always reverts | injected `handler_deposit(2000); handler_lock(6007); handler_drain()` | 1280 |
+
+Copy the rounds from `steering-log.md`. Then state in one sentence that the campaign was steered, so the states above were reached by injected orderings rather than by mutation alone. Violations are reported in Violation Details only if the campaign itself reported them; never list one that was seen only through `execute_sequence`.
 
 ## Properties Implemented
 | # | Property | Type | Guarantee | Confidence |
