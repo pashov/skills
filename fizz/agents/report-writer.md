@@ -108,13 +108,13 @@ If `PROPERTIES.md` exists, cross-reference implementation status: `[x]` implemen
 | Property | Result | Time | Assumptions |
 |----------|--------|------|-------------|
 | prove_shares_monotonic | ✅ verified | 0.4s | inputs ≤ uint128 |
-| prove_previewSwapExactOut | ⏳ timeout | 300s | — |
+| prove_previewSwapExactOut | 👍 passed (SMT unknown) | 600s | inputs ≤ uint128 |
 
 Copy results verbatim from `verification-results.md`. Then, in two or three sentences, state what the proofs cover and what they do not. Four rules, all mandatory:
 
-- Only ✅ `verified` counts as proven. 👍 `passed` means "no counterexample found, some SMT queries returned unknown" — write it that way, never as a proof.
+- Only ✅ `verified` counts as proven. 👍 `passed` means "no counterexample found, but not proven" (an SMT query returned unknown, exploration was partial, or a feature was unsupported) — write it that way, never as a proof.
 - Report the domain with every result: the `uint128` input bound and any modelled contract in the proof harness.
-- A 💥 `failed` result under arithmetic abstraction is inconclusive, not a bug — report it as needing concrete reproduction, never as a finding.
+- A 💥 `failed` result was replayed concretely by Echidna. Report it as a finding only if the counterexample respects the harness assumptions; otherwise report it as a harness issue.
 - Never write that the protocol is "formally verified". The verified unit is one property, in one domain, against one build, and it expires when that code changes. Say explicitly that multi-transaction behaviour is covered only by the fuzz campaign.
 
 ## Open TODOs

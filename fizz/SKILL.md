@@ -608,26 +608,29 @@ echidna {SUITE_DIR}/symbolic/ProveMath.t.sol --contract ProveMath --config {SUIT
 ```
 
 No wrapper script — this is not a long campaign and the per-method result lines are the output.
-**Echidna exits non-zero under `workers: 0`; that is not a failure.** Read the result lines.
+They are printed when Echidna exits. Exit code 0 means every property is `verified` or `passed`;
+1 means at least one `failed` or `could not evaluate`. Read the result lines either way.
 
 React only to warnings the worker actually prints, using the tuning table in the reference
-(`symExecMaxExplore` / `symExecMaxIters` / `symExecTimeout`, and the
-`symExecAbstractArith` two-pass recipe). **Time-box it: at most two tuning rounds per property.**
+(`symExecMaxExplore` / `symExecMaxIters` / `symExecTimeout` / `symExecSolverMemory`). The
+arithmetic abstraction is always on in Echidna 2.4; there is nothing to toggle. **Time-box it: at most two tuning rounds per property.**
 Anything still unresolved is out of reach — record it and move on. Do not spend the user's time
 grinding on a single stubborn proof.
 
 ### Step 10.5d: Record results
 
 Write `{PROJECT_ROOT}/{META_DIR}/verification-results.md`: one row per property with its result
-(`verified` / `passed` / `failed` / `error` / `timeout`), wall-clock time, and the assumptions it
+(`verified` / `passed` / `failed` / `could not evaluate`), wall-clock time, the reason for any
+`passed` (SMT `unknown`, partial exploration, unsupported feature), and the assumptions it
 carries. Cross-reference the Spec ID from `PROPERTIES.md` where the property came from there.
 
 Four rules, all mandatory:
 
-- **Only `verified` is proven.** `passed` means "no counterexample found, some SMT queries came
-  back unknown" — write it that way, and leave the property in the fuzz campaign.
-- **A counterexample under `symExecAbstractArith: true` is inconclusive**, not a bug. Reproduce it
-  concretely (Foundry repro or a targeted fuzz run) before reporting it as a finding.
+- **Only `verified` is proven.** `passed` means "no counterexample found, but not proven" —
+  write it that way, with the reason, and leave the property in the fuzz campaign.
+- **A `failed` result has already been replayed concretely by Echidna.** Before reporting it as
+  a finding, check that the counterexample respects the harness assumptions (bounds, modelled
+  contracts); a violation of those is a harness bug.
 - **State the domain every time**: the `uint128` bound and any modelled contract in the harness.
 - **Never describe the protocol as "formally verified."** The verified unit is one property, in one
   domain, against one build — and it expires when that code changes.

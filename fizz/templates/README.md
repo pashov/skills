@@ -49,9 +49,9 @@ echidna test/fizz/symbolic/ProveMath.t.sol --contract ProveMath \
         --config test/fizz/symbolic/echidna-verify.yaml --format text
 ```
 
-Echidna exits non-zero under `workers: 0` — that is not a failure; read the per-method result
-lines. Only `verified` means proven: `passed` means no counterexample was found but some solver
-queries returned unknown. Every result is bounded by the harness assumptions (typically
+The per-method result lines are printed when Echidna exits; a non-zero exit means at least one
+property failed or could not be evaluated. Only `verified` means proven: `passed` means no
+counterexample was found, but the proof did not complete. Every result is bounded by the harness assumptions (typically
 `uint128` inputs) and covers a single transaction, so multi-transaction behaviour is covered only
 by the fuzz campaign.
 

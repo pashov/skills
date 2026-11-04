@@ -13,14 +13,14 @@ Scope of this document, and hard limits of what this skill does:
 - **Verification mode only.** Echidna also has an *exploration* mode that mixes symbolic execution
   into a stateful fuzzing campaign. It is out of scope here — the fuzz campaign in Step 10 is the
   stateful story.
-- **Echidna >= 2.4 only.** The config keys below (`testMode: verification`,
-  `symExecAbstractArith`, `symExecTargets`) are 2.4-era. On older Echidna, skip this entirely and
-  do not try to emulate it with older flags.
+- **Echidna >= 2.4 only.** This guide follows Echidna 2.4.0, which ships hevm's arithmetic
+  abstraction (always on) and the `symExecSolverMemory` option. On older Echidna, skip this
+  entirely and do not try to emulate it with older flags.
 - **Never a replacement for the fuzz campaign.** Everything a proof leaves out — and that is most
   of the protocol — is still covered only by Step 10.
 
 Everything below — the result statuses, the harness patterns, the abstraction's soundness contract,
-the walls — comes from running this on real code, including a full "prove the core, fuzz the rest"
+the walls — comes from running this with Echidna 2.4.0 on real code, including a full "prove the core, fuzz the rest"
 pass over an audited DeFi protocol. Echidna's own documentation, and the hevm and halmos
 limitations pages, cover the tooling itself.
 
@@ -73,7 +73,10 @@ all in one transaction.
 ## 3. The harness: two patterns
 
 Both patterns use a `prove_` prefix by convention, and the config lists those names in
-`symExecTargets`.
+`symExecTargets`. Echidna 2.4 picks up `prove*` and `check*` functions on its own when
+`symExecTargets` is empty, but it then also verifies every other function that contains an
+assertion, including inherited `testFuzz_*` tests without the `uint128` bound. Keep the explicit
+list.
 
 ### Pattern A — promote an existing stateless test (lowest effort, highest value)
 
@@ -143,20 +146,22 @@ Config (`{SUITE_DIR}/symbolic/echidna-verify.yaml`, copied from
 `{SKILL_PATH}/templates/symbolic/echidna-verify.yaml`):
 
 ```yaml
-testMode: verification
-symExec: true
-symExecSMTSolver: bitwuzla    # strongly preferred over z3
-workers: 0                    # no concrete fuzzing workers
-seqLen: 1                     # one transaction
-symExecMaxExplore: 5000       # max branches explored
-symExecMaxIters: 5000         # max revisits of one instruction (loops, repeated calls)
+testMode: verification        # implies symExec: true, workers: 0, seqLen: 1
+symExecSMTSolver: bitwuzla    # the default; z3 is much weaker here
+symExecMaxExplore: 5000       # max branches explored (default 10)
+symExecMaxIters: 5000         # max revisits of one instruction (default 5)
 symExecTimeout: 300           # per-SMT-query seconds; default 30 is usually too low
-symExecAbstractArith: true    # see §5
+symExecSolverMemory: 16384    # per-solver memory limit in MB (the default); see §6
 testMaxGas: 1000000000        # keep gas-heavy paths from being cut as out-of-gas
 symExecTargets:               # union of every prove_* across the symbolic contracts;
   - prove_shares_monotonic    # matching is per-contract, so one list serves all files
   - prove_roundtrip_no_inflation
 ```
+
+`testMode: verification` forces one symbolic worker, no fuzzing workers, and one transaction per
+sequence, so `symExec`, `workers`, and `seqLen` do not need to be set. There is no
+`symExecAbstractArith` key in 2.4: the abstraction is always on (§5), and Echidna warns
+`unused option` if the key is present.
 
 Run one contract at a time:
 
@@ -167,22 +172,27 @@ echidna {SUITE_DIR}/symbolic/ProveMath.t.sol --contract ProveMath \
 
 Operational notes:
 
-- **Echidna exits non-zero when `workers: 0`.** That is not a failure. Read the per-method result
-  lines, not the exit code — in a loop over several contracts, `|| true` each invocation.
-- `--format text` shows what the symbolic worker is doing; the same information is in the TUI.
-- `--sym-exec-target <name>` runs a single property without editing the config — the fastest way to
-  iterate on one stubborn proof.
-- **bitwuzla must be on `PATH`.** Verify before running; z3 is much weaker here.
+- **The exit code means something.** Echidna exits 0 when every property is `verified` or
+  `passed`, and 1 when any property `failed` or `could not evaluate`. A non-zero exit is a result
+  to read, not a crash. In a loop over several contracts, record the code and keep going.
+- **Per-property results are printed when Echidna exits.** While it runs, `--format text` shows
+  only what the symbolic worker is doing (`Verifying ...`, warnings). `--format json` gives the
+  same results as `verified` / `passed` / `solved` / `error` statuses.
+- `--sym-exec-target <name>` (repeatable) runs selected properties without editing the config,
+  the fastest way to iterate on one stubborn proof.
+- **bitwuzla must be on `PATH`.** It is the default solver; verify it before running.
 
 ### Reading the result
 
-| Result | Meaning | What to do |
+| Result line | Meaning | What to do |
 |---|---|---|
-| ✅ **verified** | Every path explored, every query solved, no counterexample. Holds for all inputs in the stated domain. | Record it. This is the real product. |
-| 👍 **passed** | Fully explored, no counterexample found, but some SMT queries came back `unknown`. | **Not a proof.** Report as "no counterexample", and keep the property in the fuzz campaign. |
-| 💥 **failed** | A counterexample was found *and replayed concretely*. | A real bug — unless `symExecAbstractArith` is on; see §5. |
-| ❌ **error** | A missing feature or translation bug blocked some path (e.g. symbolic `pow` exponent). | Not a result at all. Report the property as not attempted. |
-| ⏳ **timeout** | Path exploration never finished. | Tune (§6) once; otherwise record as out of reach. |
+| `verified ✅` | Every path explored, every query solved, no counterexample. Holds for all inputs in the stated domain. | Record it. This is the product. |
+| `passed! 🎉` | No counterexample, but not a proof: some SMT query came back `unknown` (usually a timeout), some paths were only partially explored, or hevm hit an unsupported feature (e.g. a symbolic `pow` exponent). The worker's warnings say which. | **Not a proof.** Report as "no counterexample", tune once (§6), and keep the property in the fuzz campaign. |
+| `failed!💥` | hevm found a model, and Echidna replayed it concretely and the assertion failed. The call sequence is printed. | A concrete counterexample. Check it against the harness assumptions (§5), then treat it as a bug. |
+| `could not evaluate ☣` | The execution environment broke, usually in the constructor or `setUp`. | Not a result. Fix or simplify the setup. |
+
+If a property never prints `Verifying ...` and the log says `Skipped verification of method`, it
+was not in `symExecTargets` or takes dynamic arguments.
 
 Tune once, then stop. A property that resists two rounds of tuning is out of reach; that is a
 normal outcome and belongs in the report as such.
@@ -196,40 +206,32 @@ it is the shape SMT solvers handle worst: an unknown×unknown multiply bitblasts
 multiplier, division is worse, and bounding the *values* does not help because the terms are still
 256 bits wide.
 
-`symExecAbstractArith: true` (the default) makes hevm refuse to expand those operations. Instead of
-computing what `a * b` is, it treats the result as a sealed value and hands the solver a short list
-of facts true of *every* product and quotient — a product never shrinks when an input grows,
-`a * b == b * a`, a quotient never grows when the divisor does, anything times zero is zero. The
-effect can be dramatic: properties that return `unknown` after a two-minute native timeout can
-discharge in under a second.
+Echidna 2.4 runs hevm's arithmetic abstraction ([argotorg/hevm#1075](https://github.com/argotorg/hevm/pull/1075))
+in every symbolic run. Instead of computing what `a * b` is, hevm treats the result as a sealed
+value and gives the solver a list of facts true of *every* product and quotient: a product never
+shrinks when an input grows, `a * b == b * a`, a quotient never grows when the divisor does,
+constant factors cancel, and so on. The effect can be dramatic: properties that return `unknown`
+after a two-minute native timeout can discharge in under a second.
 
 **The soundness contract, which must be respected when reporting:**
 
-- **A `verified` result is real.** Every fact used holds for ordinary arithmetic, so the proof
+- **A `verified` result is sound.** Every fact used holds for ordinary arithmetic, so the proof
   covers a more general contract of which the deployed one is a special case.
-- **A counterexample is *not* real.** It may depend on a sealed value that real arithmetic could
-  never produce. Under abstraction, treat a `failed` as **inconclusive** — reproduce it concretely
-  (a Foundry repro, or the fuzzer) before calling it a bug. Never report an abstraction-only
-  counterexample as a finding.
+- **A `failed` result is concrete.** When the abstract query has a model, hevm checks it again with
+  exact multiplication, and Echidna then replays the resulting transaction on the concrete EVM.
+  Only a transaction that fails there is reported. What remains to check is the harness: a
+  counterexample that violates an assumption the harness should have made (a missing bound, an
+  unrealistic modelled token) is a harness bug, not a protocol bug.
 
-**Abstraction is not free, and not always a win.** It is exactly the right tool for pure,
-non-mutating math over symbolic divisors. It is often *pure cost* elsewhere:
+**The abstraction is not always a win.** It exists for pure, non-mutating math over symbolic
+divisors. With constant divisors (`/1e18`, `/1e27`) or on storage-mutating proofs it can add solver
+work, and a property may come back `passed` where native arithmetic would prove it. Echidna 2.4
+has no switch to turn it off. If a property only resists under the abstraction, record it as out
+of reach; running it through hevm directly (`hevm test --no-abstract-arith`) is outside this step.
 
-- with a **constant divisor** (`/1e18`, `/1e27`) the solver handles the division natively and
-  faster, so abstraction only adds uninterpreted-function bloat;
-- on **storage-mutating** proofs it can blow up memory (multi-gigabyte, OOM) or turn a fast
-  `verified` into `unknown`.
-
-So the practical recipe is **two passes**, which is a one-line config change each:
-
-1. **Pass A — `symExecAbstractArith: false`**: mutating properties, reachability checks, and
-   anything whose divisors are constants.
-2. **Pass B — `symExecAbstractArith: true`**: the pure math with symbolic divisors that Pass A left
-   as `unknown`.
-
-Only `symExecAbstractArith`, `symExecMaxIters`, and `symExecMaxExplore` are safe to tune freely —
-they change completeness and encoding, never validity. Do **not** raise `symExecAskSMTIters`; its
-default of 1 is the sound setting.
+Safe to tune freely: `symExecMaxExplore`, `symExecMaxIters`, `symExecTimeout`,
+`symExecSolverMemory`, and `symExecNSolvers`. They change completeness and resources, never
+validity. Do **not** raise `symExecAskSMTIters`; its default of 1 is the sound setting.
 
 ### The `uint128` bound
 
@@ -242,14 +244,16 @@ real assumption and must be stated whenever the result is reported. Do not quiet
 
 ## 6. Tuning, by warning
 
-Read the symbolic worker's output and react only to what it actually says:
+Read the symbolic worker's output and react only to what it actually says. In verification mode
+the warnings name the method:
 
 | Warning | Fix |
 |---|---|
-| `Partial explored path(s) ... Branches too deep at program counter: ...` | Raise `symExecMaxExplore`. This is the most important knob; it is a branch budget, so raise it in steps rather than to a huge value. |
-| `Max Iterations Reached in contract: ...` | Raise `symExecMaxIters` — a loop, a repeatedly-called function, or optimizer-deduplicated code. |
-| `Error(s) during symbolic exploration: "Result unknown by SMT solver"` | Raise `symExecTimeout` (30 → 120 → 300). If it persists, flip `symExecAbstractArith` (§5). |
-| Constructor/`setUp` path never completes | The setup is the wall, not the property. Simplify the setup (see the single-slot token in §3) or drop the property. |
+| `Partial explored path(s) during symbolic verification of method ...: Branches too deep ...` | Raise `symExecMaxExplore`. This is the most important knob; it is a branch budget, so raise it in steps rather than to a huge value. |
+| `Partial explored path(s) ... : Max iterations reached ...` | Raise `symExecMaxIters`: a loop, a repeatedly-called function, or optimizer-deduplicated code. |
+| `Error(s) solving constraints produced by method ...: "Result unknown by SMT solver"` | Raise `symExecTimeout` (30 → 120 → 300). If it persists, the query is out of the solver's reach under the abstraction (§5). |
+| The solver dies with `std::bad_alloc` or an out-of-memory error | Each solver process is capped by `symExecSolverMemory` (MB, default 16384). hevm enforces the cap only on Linux. Keep `symExecSolverMemory × symExecNSolvers` below the machine's free RAM; lower `symExecNSolvers` before lowering the cap. |
+| `could not evaluate ☣`, or the constructor/`setUp` path never completes | The setup is the wall, not the property. Simplify the setup (see the single-slot token in §3) or drop the property. |
 
 ---
 
@@ -260,8 +264,9 @@ Before proposing this to a user, be honest about all of it:
 - **Human time.** The harness is hand-written and the mapping/setup walls are hit by trial. On a
   real protocol this is hours to days of work, not minutes — and it is the part no tool automates.
 - **Machine time.** Per-property runtimes range from under a second to hours; some never finish.
-  On an audited DeFi protocol, a settled suite of ~60 properties re-verified in about half an
-  hour — but reaching that state took far longer than running it does.
+  On an audited DeFi protocol with Echidna 2.4.0, 56 of 60 properties verified in about half an
+  hour in total, most in about a second, and the four that ended `passed` took another five hours
+  of solver time between them. Reaching a settled suite took far longer than running it does.
 - **It expires on every code change.** A proof is about specific bytecode. Any edit to the proven
   functions invalidates every result and the whole set must be re-run.
 - **Assumptions are part of the result.** The `uint128` bound, any modelled token, any `require`
@@ -270,8 +275,8 @@ Before proposing this to a user, be honest about all of it:
 - **Coverage is narrow by construction.** One transaction, from the constructor, calling only
   contracts your harness deployed. No reentrancy from unknown external addresses. Infinite gas is
   assumed. Multi-transaction and emergent behaviour are entirely the fuzzer's job.
-- **Partial results are the norm.** Expect a meaningful fraction of properties to land on `passed`,
-  `timeout`, or `error`. That is not a failed run; it is the shape of the technique today.
+- **Partial results are the norm.** Expect a meaningful fraction of properties to land on `passed`
+  or `could not evaluate`. That is not a failed run; it is the shape of the technique today.
 
 The benefits, equally plainly:
 
@@ -291,12 +296,13 @@ The benefits, equally plainly:
 
 When writing up results (Step 11 report, or a message to the user):
 
-1. Report **only `verified`** as proven. `passed` is "no counterexample found, some queries
-   unknown" — say that, in those words.
+1. Report **only `verified`** as proven. `passed` is "no counterexample found, but not proven" —
+   say that, in those words, with the reason from the worker's warnings.
 2. Always state the domain: the `uint128` bound, and any harness assumption or modelled contract.
 3. Name what was **not** proven, explicitly — the out-of-reach properties and, more importantly,
    the whole stateful surface the proofs do not touch. Verified conversion math says nothing about
    whether an executed swap honours its quote.
-4. Never present an abstraction-only counterexample as a bug (§5).
+4. Report a `failed` result as a finding only after checking the counterexample against the
+   harness assumptions (§5). Echidna has already replayed it concretely.
 5. Never write "formally verified" about the protocol. The verified unit is a property, in a
    domain, against one build.

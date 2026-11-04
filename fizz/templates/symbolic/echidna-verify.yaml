@@ -4,8 +4,9 @@
 # the stateful campaign keeps using ../../echidna.yaml. See
 # fizz/references/symbolic-verification.md for what these results mean.
 #
-# Run one contract at a time (echidna exits non-zero with `workers: 0`; that is
-# not a failure — read the per-method result lines):
+# Run one contract at a time. Per-property results are printed when echidna exits;
+# exit code 0 means every property is verified or passed, 1 means at least one
+# failed or could not be evaluated:
 #
 #   echidna test/fizz/symbolic/ProveMath.t.sol --contract ProveMath \
 #           --config test/fizz/symbolic/echidna-verify.yaml --format text
@@ -13,29 +14,26 @@
 # To iterate on a single property without editing this file:
 #   ... --sym-exec-target prove_<name>
 
+# Verification mode implies symExec: true, workers: 0 and seqLen: 1.
 testMode: verification
-symExec: true
-symExecSMTSolver: bitwuzla   # strongly preferred over z3 for this workload
+symExecSMTSolver: bitwuzla   # the default; strongly preferred over z3 for this workload
 
-workers: 0                   # no concrete fuzzing workers
-seqLen: 1                    # verification mode explores a single transaction
-
-# Exploration budgets. Raise in response to the worker's warnings, not preemptively:
-#   "Branches too deep at program counter"  -> symExecMaxExplore
-#   "Max Iterations Reached in contract"    -> symExecMaxIters
-#   "Result unknown by SMT solver"          -> symExecTimeout (30 -> 120 -> 300)
+# Exploration budgets. The defaults (10 branches, 5 iterations) are too low for a
+# deployment + setUp + call path. Raise further only in response to the worker's warnings:
+#   "Branches too deep"                -> symExecMaxExplore
+#   "Max iterations reached"           -> symExecMaxIters
+#   "Result unknown by SMT solver"     -> symExecTimeout (30 -> 120 -> 300)
 symExecMaxExplore: 5000
 symExecMaxIters: 5000
 symExecTimeout: 300
 
-# Arithmetic abstraction for symbolic `a * b / c`. Default true.
-#   true  -> pure, non-mutating math over SYMBOLIC divisors (the case it exists for).
-#            A `verified` result is sound; a COUNTEREXAMPLE IS NOT — reproduce it
-#            concretely before calling it a bug.
-#   false -> storage-mutating proofs, reachability checks, and constant divisors
-#            (/1e18, /1e27), where abstraction is usually pure cost.
-# Two passes over the same harness, one line apart, is the normal workflow.
-symExecAbstractArith: true
+# Memory limit per solver process, in MB (enforced by hevm on Linux only). The default
+# is 16384; keep symExecSolverMemory x symExecNSolvers below the machine's free RAM.
+symExecSolverMemory: 16384
+
+# The arithmetic abstraction for symbolic `a * b / c` is always on in Echidna 2.4;
+# there is no config key for it. A `verified` result is sound, and a `failed` result
+# has already been replayed concretely by echidna.
 
 # Do not raise symExecAskSMTIters; its default of 1 is the sound setting.
 
@@ -44,8 +42,8 @@ disableSlither: false        # keep slither on (constant extraction)
 format: "text"               # show what the symbolic worker is doing
 
 # The union of every prove_* across the symbolic contracts. Matching is per-contract,
-# so one list serves every file; no-argument helpers are skipped automatically.
-# Inherited testFuzz_* are deliberately NOT listed — only the bounded prove_ wrappers
-# are verified.
+# so one list serves every file. Keep this list explicit: when it is empty, echidna
+# also verifies every function containing an assertion, including inherited
+# testFuzz_* tests that lack the uint128 bound.
 symExecTargets:
   - prove_example_monotonic

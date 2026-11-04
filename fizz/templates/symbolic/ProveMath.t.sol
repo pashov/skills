@@ -13,10 +13,10 @@ pragma solidity >=0.6.2 <0.9.0;
 //
 // Read fizz/references/symbolic-verification.md before editing. The two rules that
 // matter most:
-//   * only `verified` means proven; `passed` means "no counterexample, some SMT
-//     queries unknown";
-//   * under symExecAbstractArith, a counterexample is NOT sound — reproduce it
-//     concretely before reporting it as a bug.
+//   * only `verified` means proven; `passed` means "no counterexample, but the
+//     proof did not complete";
+//   * a `failed` result is replayed concretely by echidna, but check it against
+//     the bounds and models below before reporting it as a bug.
 
 import {Target} from "../../../src/Target.sol";
 
