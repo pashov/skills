@@ -9,7 +9,7 @@
  * by the user.
  *
  * Usage:
- *   node run_echidna.js <PROJECT_ROOT> [--meta-dir <path>] [--config <path>] [--contract <name>] [--log-file <path>] [--timeout <seconds>] [--logs]
+ *   node run_echidna.js <PROJECT_ROOT> [--meta-dir <path>] [--config <path>] [--contract <name>] [--log-file <path>] [--timeout <seconds>] [--server <port>] [--logs]
  *
  * Defaults:
  *   --meta-dir   fizz_data
@@ -17,6 +17,7 @@
  *   --contract   FuzzTester
  *   --log-file   <PROJECT_ROOT>/<meta-dir>/corpus_echidna/echidna-run.log
  *   --timeout    600
+ *   --server     off (Echidna >= 2.4: serve MCP at http://127.0.0.1:<port>/mcp for steering; see echidna_mcp.js)
  *   --logs       false (live log viewer runs and prints its URL, but the browser is not auto-opened)
  */
 
@@ -27,7 +28,7 @@ const { startLogViewer } = require('./lib/log-viewer');
 
 const args = process.argv.slice(2);
 if (args.length === 0 || args[0] === '--help') {
-    console.log('Usage: node run_echidna.js <PROJECT_ROOT> [--meta-dir <path>] [--config <path>] [--contract <name>] [--log-file <path>] [--timeout <seconds>] [--logs]');
+    console.log('Usage: node run_echidna.js <PROJECT_ROOT> [--meta-dir <path>] [--config <path>] [--contract <name>] [--log-file <path>] [--timeout <seconds>] [--server <port>] [--logs]');
     process.exit(0);
 }
 
@@ -38,6 +39,7 @@ let contractName = 'FuzzTester';
 let logFilePath = null;
 let timeoutSeconds = 600;
 let openLogs = false;
+let serverPort = null;
 
 for (let i = 1; i < args.length; i++) {
     if (args[i] === '--meta-dir' && args[i + 1]) {
@@ -50,6 +52,8 @@ for (let i = 1; i < args.length; i++) {
         logFilePath = args[++i];
     } else if (args[i] === '--timeout' && args[i + 1]) {
         timeoutSeconds = Number(args[++i]);
+    } else if (args[i] === '--server' && args[i + 1]) {
+        serverPort = Number(args[++i]);
     } else if (args[i] === '--logs') {
         openLogs = true;
     }
@@ -67,6 +71,10 @@ if (!logFilePath) {
 
 if (!fs.existsSync(configPath)) {
     console.error(`Echidna config not found: ${configPath}`);
+    process.exit(1);
+}
+if (serverPort !== null && (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535)) {
+    console.error(`Invalid --server port: ${serverPort}`);
     process.exit(1);
 }
 if (timeoutSeconds !== null && (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 1)) {
@@ -87,6 +95,9 @@ startLogViewer('Echidna', '#a855f7', { open: openLogs }).then(({ viewerState, ap
     writeStderr(`${TAG} Running until Echidna exits on its own (for example after testLimit or a configured stop condition).\n`);
     if (timeoutSeconds !== null) {
         writeStderr(`${TAG} Wrapper timeout enabled: ${timeoutSeconds}s\n`);
+    }
+    if (serverPort !== null) {
+        writeStderr(`${TAG} MCP server: http://127.0.0.1:${serverPort}/mcp (query it with echidna_mcp.js --port ${serverPort})\n`);
     }
     writeStderr('\n');
 
@@ -122,7 +133,12 @@ startLogViewer('Echidna', '#a855f7', { open: openLogs }).then(({ viewerState, ap
         return trailing;
     }
 
-    const child = spawn('echidna', ['.', '--contract', contractName, '--config', configPath], {
+    // --format text keeps the TUI from owning the terminal; the MCP server needs it.
+    const echidnaArgs = ['.', '--contract', contractName, '--config', configPath];
+    if (serverPort !== null) {
+        echidnaArgs.push('--server', String(serverPort), '--format', 'text');
+    }
+    const child = spawn('echidna', echidnaArgs, {
         cwd: projectRoot,
         env: childEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
