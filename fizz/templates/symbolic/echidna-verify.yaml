@@ -1,0 +1,49 @@
+# Echidna verification-mode config (symbolic execution / proofs).
+#
+# Requires Echidna >= 2.4 and `bitwuzla` on PATH. This is NOT the fuzzing config —
+# the stateful campaign keeps using ../../echidna.yaml. See
+# fizz/references/symbolic-verification.md for what these results mean.
+#
+# Run one contract at a time. Per-property results are printed when echidna exits;
+# exit code 0 means every property is verified or passed, 1 means at least one
+# failed or could not be evaluated:
+#
+#   echidna test/fizz/symbolic/ProveMath.t.sol --contract ProveMath \
+#           --config test/fizz/symbolic/echidna-verify.yaml --format text
+#
+# To iterate on a single property without editing this file:
+#   ... --sym-exec-target prove_<name>
+
+# Verification mode implies symExec: true, workers: 0 and seqLen: 1.
+testMode: verification
+symExecSMTSolver: bitwuzla   # the default; strongly preferred over z3 for this workload
+
+# Exploration budgets. The defaults (10 branches, 5 iterations) are too low for a
+# deployment + setUp + call path. Raise further only in response to the worker's warnings:
+#   "Branches too deep"                -> symExecMaxExplore
+#   "Max iterations reached"           -> symExecMaxIters
+#   "Result unknown by SMT solver"     -> symExecTimeout (30 -> 120 -> 300)
+symExecMaxExplore: 5000
+symExecMaxIters: 5000
+symExecTimeout: 300
+
+# Memory limit per solver process, in MB (enforced by hevm on Linux only). The default
+# is 16384; keep symExecSolverMemory x symExecNSolvers below the machine's free RAM.
+symExecSolverMemory: 16384
+
+# The arithmetic abstraction for symbolic `a * b / c` is always on in Echidna 2.4;
+# there is no config key for it. A `verified` result is sound, and a `failed` result
+# has already been replayed concretely by echidna.
+
+# Do not raise symExecAskSMTIters; its default of 1 is the sound setting.
+
+testMaxGas: 1000000000       # high cap so gas-heavy paths are not cut as out-of-gas
+disableSlither: false        # keep slither on (constant extraction)
+format: "text"               # show what the symbolic worker is doing
+
+# The union of every prove_* across the symbolic contracts. Matching is per-contract,
+# so one list serves every file. Keep this list explicit: when it is empty, echidna
+# also verifies every function containing an assertion, including inherited
+# testFuzz_* tests that lack the uint128 bound.
+symExecTargets:
+  - prove_example_monotonic
