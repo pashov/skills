@@ -24,6 +24,8 @@ Return findings as structured blocks:
 
 FINDINGs have concrete, unguarded, exploitable attack paths. LEADs have real code smells with partial paths — default to LEAD over dropping.
 
+**Code-real but live-dormant patterns are LEADs, not FINDINGs.** A bug that is real in the source but cannot profit a caller in a live deployment stays a LEAD: a missing Chainlink `minAnswer`/`maxAnswer` bound whose trigger price no real feed reaches, a spot-oracle "manipulation" that needs uneconomic capital, or a permissionless withdraw whose funds route to a fixed non-caller address (`owner()`, a treasury). Emit these as LEADs with the dormancy named, and let `judging.md` Gates 2 and 4 decide. Do not emit them as FINDINGs on the strength of the code pattern alone.
+
 **Every FINDING must have a `proof:` field** — concrete values, traces, or state sequences from the actual code. No proof = LEAD, no exceptions.
 
 **One vulnerability per item.** Same root cause = one item. Different fixes needed = separate items.
