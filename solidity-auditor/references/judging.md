@@ -16,6 +16,7 @@ Prove the vulnerable state exists in a live deployment.
 
 - Structurally impossible (enforced invariant prevents it) → **REJECTED**
 - Requires privileged actions outside normal operation → **DEMOTE**
+- Requires a value outside any achievable real-world range → **DEMOTE** — real in source, dormant in live state. Covers a price below Chainlink's `minAnswer` or above `maxAnswer` (the default bounds are far outside any move a real feed makes, so the "missing bounds check" almost never triggers), and an oracle deviation only reachable by moving spot with uneconomic capital. State the specific live value the attack needs and why no normal deployment reaches it.
 - Achievable through normal usage or common token behaviors → **clears**, continue
 
 ## Gate 3 — Trigger
@@ -39,6 +40,7 @@ No amplifier named → **REJECTED**. Amplifier named → judge it on that unpriv
 Prove material harm to an identifiable victim.
 
 - Self-harm only → **REJECTED**
+- Permissionless call, but funds route to a fixed non-caller recipient (`owner()`, a hardcoded treasury or fund address) → **REJECTED** — the access-control gap is real but the caller gains nothing, so no attacker profits. Clears only if the attacker controls the recipient, or an amplifier (race, retroactive sweep, asymmetric formula) redirects the flow to them. Check where the value actually lands before scoring a "withdraw-all" or "excessive privilege" hit.
 - Dust-level, no compounding → **DEMOTE**
 - Material loss to identifiable victim → **CONFIRMED**
 
@@ -63,7 +65,7 @@ Start at **100**, deduct: partial attack path **-20**, bounded non-compounding i
 Before finalizing leads, promote where warranted:
 
 - **Cross-contract echo.** Same root cause confirmed as FINDING in one contract → promote in every contract where the identical pattern appears.
-- **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75.
+- **Multi-agent convergence.** 2+ agents flagged same area, lead was demoted (not rejected) → promote to FINDING at confidence 75. Convergence is a prioritization signal, not independent confirmation: the agents share a model and correlate their mistakes, so agreement alone never clears a gate. A promoted convergence finding still passes Gates 1-4 against live state, and a single-agent lead that does pass them is a real finding regardless of how many agents missed it.
 - **Partial-path completion.** Only weakness is incomplete trace but path is reachable and unguarded → promote to FINDING at confidence 75, **description only — a deliberate exception to the threshold**. 75 clears the line, so this finding would otherwise carry a **Fix** block; it does not, because the trace it would fix was never completed. The other two promotions above take their **Fix** block normally.
 
 ## Leads
