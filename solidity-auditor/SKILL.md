@@ -26,6 +26,8 @@ You are the orchestrator of a parallelized smart contract security audit.
 
   `-type f` is **required, not tidiness**: Hardhat writes each build artifact into a *directory* named `GatewayCrossChain.sol/`, so a `find` without it matches directories as if they were source files and hands them to `cat`. Do not drop it, and do not re-derive this command — paste it.
 
+  **Check for in-scope logic under a `lib/` path before trusting a default scan.** The exclude pattern treats every `lib/` as a dependency, but some projects keep their own custom logic in `src/core/lib/`, `src/lib/` or similar — a default scan then audits almost nothing and reports it as clean. Before running, glance at what lives under any in-repo `lib/`; if it holds project code rather than vendored dependencies, switch to filename mode with an explicit list (`find ./src -type f -name '*.sol' -not -path '*/interfaces/*'`) so those files are scanned.
+
 - **`$filename ...`**: scan the specified file(s) only. **The exclude pattern does not apply here.** A file named on the command line is always scanned, wherever it lives — naming `node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol` scans that file. The pattern chooses what a *default* scan discovers; it never overrides an explicit request.
 
 **Flags:**

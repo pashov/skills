@@ -1233,8 +1233,32 @@ def main() -> int:
     except subprocess.CalledProcessError:
         branch = "unknown"
 
+    # Detect a shallow or history-less checkout. Contest and bounty targets
+    # are often delivered as a shallow clone or a source snapshot with no real
+    # history, which leaves every history-based signal below (fix candidates,
+    # late changes, dev patterns) with almost nothing to work from. Surface it
+    # explicitly so the consumer treats a thin history section as "unknown",
+    # not as "clean".
+    is_shallow = run_git(
+        repo, "rev-parse", "--is-shallow-repository", allow_fail=True,
+    ).strip() == "true"
+
     # Phase 1: Collect git data
     commits = parse_git_log(repo, src_dir)
+
+    history_warning = None
+    if is_shallow:
+        history_warning = (
+            "Shallow clone detected — history is truncated, so fix-candidate, "
+            "late-change and developer-pattern analysis below is incomplete. "
+            "Re-run against a full clone (git fetch --unshallow) for reliable history."
+        )
+    elif len(commits) <= 1:
+        history_warning = (
+            "Repository has no usable history (source snapshot or single import "
+            "commit) — history-based sections below have nothing to analyze and "
+            "should not be read as a clean result."
+        )
 
     # Phase 2: Find source files
     source_files = find_source_files(repo, src_dir)
@@ -1269,6 +1293,8 @@ def main() -> int:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "git_head": head,
             "git_branch": branch,
+            "is_shallow": is_shallow,
+            "history_warning": history_warning,
             "total_commits": len(commits),
             "total_source_files": len(source_files),
             "analysis_time_ms": elapsed_ms,

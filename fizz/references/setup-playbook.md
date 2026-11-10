@@ -90,3 +90,27 @@ Leave `// TODO` only when:
 - the protocol needs a privileged operational decision that should come from the user
 
 Every TODO should say what is missing and why it blocks a safe default.
+
+## Uniswap V3 Integration Mocks
+
+The `@uniswap/v3-core` and `@uniswap/v3-periphery` npm packages ship interfaces and libraries but **no deployable `UniswapV3Factory`, `UniswapV3Pool` or `NonfungiblePositionManager` source** that compiles under a modern Foundry profile. A generated harness that tries to `new` those contracts from the npm import will not build.
+
+When the target integrates Uniswap V3 (or a fork of it):
+
+- deploy the real pool contracts only if the project already vendors compilable V3 source in its own tree
+- otherwise hand-mock the surface the protocol actually calls (`slot0`, `observe`, `swap`, `mint`, `positions`) with a minimal mock that returns controllable values — the fuzz campaign cares about how the protocol *reacts* to pool state, not about reproducing concentrated-liquidity math
+- make the mock's tick/price settable from handlers so invariants can be probed across price ranges
+
+The same caveat applies to any dependency whose npm package exposes interfaces without deployable implementation source.
+
+## Tooling: Medusa Install
+
+Medusa has **no Chocolatey/Homebrew package** on most setups — install it from the GitHub release binary (`crytic/medusa`) and put it on `PATH` before running a Medusa campaign. Echidna installs normally. Confirm both resolve (`medusa version`, `echidna --version`) during setup so a campaign does not fail late on a missing binary.
+
+## Background Agent Reliability
+
+Property-implementer and analyzer steps run as background agents, and a run can fail in two non-obvious ways: the agent is killed mid-run, or it returns a non-answer and spawns a confused nested background process. Neither always surfaces as an error in the status line.
+
+- treat the **completion notification** as the source of truth, not the live status — a status can read "failed" after the report already arrived, or read "running" on a process that has stalled
+- if a step returns a garbage or empty result, relaunch it clean rather than building on the partial output
+- on Windows the first `bash`/WSL call can fail with a VM-start timeout (`HCS_E_CONNECTION_TIMEOUT`); retry once. Run multi-line shell as a `.sh` file rather than inline `bash -c`, because inline invocation loses path variables when the repo path contains spaces (a Windows home directory usually does).
