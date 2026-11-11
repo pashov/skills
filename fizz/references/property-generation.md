@@ -147,3 +147,73 @@ These are the assertion helpers from `utils/PropertiesAsserts.sol`:
 | `lte(a, b, reason)` | `a <= b` |
 
 All have both `uint256` and `int256` overloads. All emit descriptive failure events before `assert(false)`.
+
+## 6. Share-converted amounts
+
+This applies when a property compares an amount that went through `previewRedeem`, `convertToAssets`, `previewWithdraw` or `convertToShares` against a requested, debited or otherwise raw amount. Every conversion rounds, so the two sides differ by dust on correct code too.
+
+- First choice: measure the moved value with the asset's own `balanceOf` deltas, taken through `Snapshots.sol` (section 3).
+- Otherwise, allow a stated tolerance: a value whose name contains `tolerance`, equal to a few wei per conversion times the number of conversions in the call. The natspec states that count. Apply the tolerance in the direction rounding goes.
+- Never compare a converted value to a raw amount with a bare `lte`/`gte`/`lt`/`gt`/`eq` or `<=`/`>=`.
+
+Exception: when the inequality *is* the ERC-4626 rounding direction (roundtrip-rounding-analyst Patterns D and E, where both sides come from the same state), the property carries `/// @dev rounding-direction` and keeps its exact inequality.
+
+`balanceOf`-delta form:
+
+```solidity
+/// @notice SP-NN: withdraw pays the actor exactly the requested assets
+function property_withdrawPaysRequested(uint256 assets) internal {
+    eq(
+        stateAfter.actorTokenBalance - stateBefore.actorTokenBalance,
+        assets,
+        "Withdraw paid != requested assets"
+    );
+}
+```
+
+Tolerance form:
+
+```solidity
+/// @notice GL-NN: fee recipient cannot redeem more than the recoverable fees
+/// @dev 1 conversion (previewRedeem), 2 wei each
+function property_feeRedeemableWithinRecoverable() public {
+    uint256 conversionTolerance = 2 * 1;
+    lte(
+        vault.previewRedeem(vault.balanceOf(feeRecipient)),
+        ghosts.recoverableFees + conversionTolerance,
+        "Fee recipient redeemable > recoverable"
+    );
+}
+```
+
+## 7. Stand-in contracts
+
+A stand-in is any contract the suite writes in place of a real dependency. Its declaration line starts `contract Mock` or `contract StandIn`, and directly above that line it carries this block:
+
+```solidity
+// stand-in limits:
+// - share price: <bound the real contract keeps, or "none">
+// - virtual shares / offset: <value, or "none">
+// - max interest per call: <bound, or "none">
+// - who can mint: <role, or "anyone">
+```
+
+- The stand-in enforces each bound that isn't `none` itself, with a `require` or a cap. A handler clamp alone doesn't count: unclamped handlers reach the stand-in directly.
+- A bound the real contracts don't document takes the tightest value the real contracts' code shows.
+- A property that reads a stand-in's state carries `/// @dev stand-in limits: <ContractName>`.
+
+```solidity
+// stand-in limits:
+// - share price: none
+// - virtual shares / offset: none
+// - max interest per call: 10% of totalAssets
+// - who can mint: anyone
+contract MockStrategy {
+    uint256 public totalAssets;
+
+    function accrueInterest(uint256 amount) external {
+        uint256 cap = totalAssets / 10;
+        totalAssets += amount > cap ? cap : amount;
+    }
+}
+```

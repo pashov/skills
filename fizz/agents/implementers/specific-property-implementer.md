@@ -26,6 +26,8 @@ These rules expand on the general property implementation instructions in `prope
 
 Specific properties are `internal` functions called at the end of relevant handlers. They check postconditions for specific operations.
 
+Where a property compares a share-converted value to a raw amount, follow `property-generation.md` section 6: measure with `balanceOf` deltas, or add a named tolerance of a few wei per conversion with the conversion count in its natspec. A roundtrip-rounding Pattern D/E check keeps its exact inequality and carries `/// @dev rounding-direction`.
+
 ### MANDATORY: Spec ID doctag
 
 Every property function you write MUST have its Spec ID as the first thing in its natspec, on its own line, in this exact form:
