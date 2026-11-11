@@ -185,3 +185,35 @@ function property_feeRedeemableWithinRecoverable() public {
     );
 }
 ```
+
+## 7. Stand-in contracts
+
+A stand-in is any contract the suite writes in place of a real dependency. Its declaration line starts `contract Mock` or `contract StandIn`, and directly above that line it carries this block:
+
+```solidity
+// stand-in limits:
+// - share price: <bound the real contract keeps, or "none">
+// - virtual shares / offset: <value, or "none">
+// - max interest per call: <bound, or "none">
+// - who can mint: <role, or "anyone">
+```
+
+- The stand-in enforces each bound that isn't `none` itself, with a `require` or a cap. A handler clamp alone doesn't count: unclamped handlers reach the stand-in directly.
+- A bound the real contracts don't document takes the tightest value the real contracts' code shows.
+- A property that reads a stand-in's state carries `/// @dev stand-in limits: <ContractName>`.
+
+```solidity
+// stand-in limits:
+// - share price: none
+// - virtual shares / offset: none
+// - max interest per call: 10% of totalAssets
+// - who can mint: anyone
+contract MockStrategy {
+    uint256 public totalAssets;
+
+    function accrueInterest(uint256 amount) external {
+        uint256 cap = totalAssets / 10;
+        totalAssets += amount > cap ? cap : amount;
+    }
+}
+```

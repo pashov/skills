@@ -89,6 +89,10 @@ If the correct bound is unclear, keep the clamp loose and leave a targeted `// T
 - If the protocol manages native tokens, include a special `<Contract>_donateETH` handler that accepts an arbitrary amount and sends it to the protocol using `Actor.forceSendETH(...)`.
 - If the protocol manages ERC20 tokens, include a special `<Contract>_donateERC20` handler that accepts an arbitrary amount and (optionally) token address and sends it to the protocol.
 
+### Stand-in Handlers
+
+Handlers on a stand-in clamp to its `// stand-in limits:` block and cannot reach a share price or balance the block excludes. The block is defined in `property-generation.md` section 7.
+
 ## Boundary-Value Stress Handlers
 
 For every clamped handler, generate **stress variants** that target the extremes of the input domain. Clamped handlers focus on "sensible" ranges to maximize meaningful state transitions, but bugs cluster at the boundaries those clamps filter out. Stress handlers exist to hit those boundaries.
