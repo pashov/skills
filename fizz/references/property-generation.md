@@ -147,3 +147,41 @@ These are the assertion helpers from `utils/PropertiesAsserts.sol`:
 | `lte(a, b, reason)` | `a <= b` |
 
 All have both `uint256` and `int256` overloads. All emit descriptive failure events before `assert(false)`.
+
+## 6. Share-converted amounts
+
+This applies when a property compares an amount that went through `previewRedeem`, `convertToAssets`, `previewWithdraw` or `convertToShares` against a requested, debited or otherwise raw amount. Every conversion rounds, so the two sides differ by dust on correct code too.
+
+- First choice: measure the moved value with the asset's own `balanceOf` deltas, taken through `Snapshots.sol` (section 3).
+- Otherwise, allow a stated tolerance: a value whose name contains `tolerance`, equal to a few wei per conversion times the number of conversions in the call. The natspec states that count. Apply the tolerance in the direction rounding goes.
+- Never compare a converted value to a raw amount with a bare `lte`/`gte`/`lt`/`gt`/`eq` or `<=`/`>=`.
+
+Exception: when the inequality *is* the ERC-4626 rounding direction (roundtrip-rounding-analyst Patterns D and E, where both sides come from the same state), the property carries `/// @dev rounding-direction` and keeps its exact inequality.
+
+`balanceOf`-delta form:
+
+```solidity
+/// @notice SP-NN: withdraw pays the actor exactly the requested assets
+function property_withdrawPaysRequested(uint256 assets) internal {
+    eq(
+        stateAfter.actorTokenBalance - stateBefore.actorTokenBalance,
+        assets,
+        "Withdraw paid != requested assets"
+    );
+}
+```
+
+Tolerance form:
+
+```solidity
+/// @notice GL-NN: fee recipient cannot redeem more than the recoverable fees
+/// @dev 1 conversion (previewRedeem), 2 wei each
+function property_feeRedeemableWithinRecoverable() public {
+    uint256 conversionTolerance = 2 * 1;
+    lte(
+        vault.previewRedeem(vault.balanceOf(feeRecipient)),
+        ghosts.recoverableFees + conversionTolerance,
+        "Fee recipient redeemable > recoverable"
+    );
+}
+```
